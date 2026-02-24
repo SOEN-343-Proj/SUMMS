@@ -35,8 +35,18 @@ function ParkingSearch({ onSearch, onClose }) {
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&viewbox=${viewbox}&bounded=1&limit=12&countrycodes=ca`
         )
         const data = await response.json()
-        setSuggestions(data)
-        setShowSuggestions(data.length > 0)
+        
+        // If no results with bounded search, try without bounding box for partial matches
+        let results = data
+        if (results.length === 0 && /^\d+/.test(address.trim())) {
+          const retryResponse = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ' Montreal Laval')}&limit=12&countrycodes=ca`
+          )
+          results = await retryResponse.json()
+        }
+        
+        setSuggestions(results)
+        setShowSuggestions(results.length > 0)
         setLoading(false)
       } catch (err) {
         console.error(err)
