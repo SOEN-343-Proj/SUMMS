@@ -38,8 +38,8 @@ class RegisterRequest(BaseModel):
 
 
 app = FastAPI(
-    title="SUMMS Backend API",
-    description="FastAPI backend for SUMMS authentication and user management.",
+    title="CityFlow Backend API",
+    description="FastAPI backend for CityFlow urban mobility management.",
     version="1.0.0",
 )
 
@@ -57,7 +57,7 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"message": "SUMMS FastAPI backend is running"}
+    return {"message": "CityFlow API backend is running"}
 
 
 @app.get("/health")

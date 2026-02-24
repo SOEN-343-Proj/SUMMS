@@ -11,7 +11,7 @@ function UserDashboard({ user, onLogout }) {
 
       <div className="dashboard-header">
         <div>
-          <h1>Welcome to SUMMS</h1>
+          <h1>Welcome to CityFlow</h1>
           <p className="welcome-text">Hello, {user.name}!</p>
           <p className="user-email">{user.email}</p>
         </div>

@@ -1,5 +1,5 @@
 """
-SUMMS - Student Union Management System
+CityFlow - Urban Mobility Management System
 Credentials Management Module
 
 This module maintains lists of user and admin credentials.
@@ -13,7 +13,7 @@ ADMIN_CODE = "ADMIN2025"
 # Each admin has: email, password, name, assigned_code
 admin_credentials = [
     {
-        "email": "admin@summs.com",
+        "email": "admin@cityflow.com",
         "password": "SecureAdmin123!",
         "name": "System Administrator",
         "code": ADMIN_CODE,
@@ -173,7 +173,7 @@ def get_all_admins():
 #
 if __name__ == "__main__":
     print("=" * 50)
-    print("SUMMS Credentials System")
+    print("CityFlow Credentials System")
     print("=" * 50)
     print(f"\nAdmin Code: {ADMIN_CODE}")
     print(f"\nAdmin Accounts ({len(admin_credentials)}):")
