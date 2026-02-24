@@ -2,6 +2,8 @@
 Smart Urban Mobility Management System
 
 ## How to run
+**Prior to executing the steps, install React & Node on your device**
+
 1. Clone the repository --> `git clone https://github.com/SOEN-343-Proj/SUMMS.git`
 2. On the project folder, run --> `npm install` on the IDE terminal
 3. Run --> `npm run dev`
