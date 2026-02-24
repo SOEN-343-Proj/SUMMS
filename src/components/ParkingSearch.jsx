@@ -192,8 +192,15 @@ function ParkingSearch({ onSearch, onClose }) {
                 {suggestions.map((suggestion, index) => {
                   // Parse the display name for better formatting
                   const parts = suggestion.display_name.split(',')
-                  const address = parts[0].trim() // e.g., "413 Rue Olivier-Chauveau"
-                  const city = parts[1]?.trim() // e.g., "Auteuil"
+                  let address = parts[0].trim()
+                  const city = parts[1]?.trim()
+                  
+                  // Clean up address ranges (e.g., "9132;9134;9136;9138" -> "9132-9138")
+                  if (address.includes(';')) {
+                    const numbers = address.split(';')
+                    address = `${numbers[0]}-${numbers[numbers.length - 1]}`
+                  }
+                  
                   const fullAddress = city ? `${address}, ${city}` : address
                   
                   return (
