@@ -201,10 +201,12 @@ function ParkingSearch({ onSearch, onClose }) {
                       className="suggestion-item"
                       onClick={() => handleSuggestionClick(suggestion)}
                     >
-                      <span className="suggestion-icon">📍</span>
                       <div className="suggestion-text">
                         <div className="suggestion-main">{address}</div>
-                        <div className="suggestion-secondary">{city}</div>
+                        <div className="suggestion-secondary">
+                          <span className="location-icon">📍</span>
+                          {city}
+                        </div>
                       </div>
                     </div>
                   )

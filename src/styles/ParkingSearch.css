@@ -205,8 +205,7 @@
 
 .suggestion-item {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: stretch;
   padding: 14px 16px;
   cursor: pointer;
   transition: all 0.2s;
@@ -221,18 +220,12 @@
   background: #1a4d6d;
 }
 
-.suggestion-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
 .suggestion-text {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .suggestion-main {
@@ -251,6 +244,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.location-icon {
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 .suggestion-loading {
