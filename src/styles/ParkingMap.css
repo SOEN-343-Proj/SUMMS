@@ -1,0 +1,198 @@
+.parking-map-container {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #1a1a2e;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+}
+
+.parking-map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.parking-map-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 5px 10px;
+  transition: transform 0.2s;
+}
+
+.close-btn:hover {
+  transform: scale(1.2);
+}
+
+.parking-map-content {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  overflow: hidden;
+}
+
+.map-wrapper {
+  flex: 1;
+  position: relative;
+}
+
+.parking-map {
+  width: 100%;
+  height: 100%;
+}
+
+.parking-spots-list {
+  width: 350px;
+  background: #16213e;
+  color: white;
+  padding: 20px;
+  border-left: 1px solid #0f3460;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.2);
+}
+
+.parking-spots-list h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #ffd700;
+}
+
+.spots-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.spots-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.spots-scroll::-webkit-scrollbar-track {
+  background: #0f3460;
+}
+
+.spots-scroll::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 3px;
+}
+
+.spot-card {
+  background: #0f3460;
+  border-left: 4px solid #ffd700;
+  padding: 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.spot-card:hover {
+  background: #1a4d6d;
+  transform: translateX(5px);
+}
+
+.spot-card.full {
+  border-left-color: #ff6b6b;
+  opacity: 0.7;
+}
+
+.spot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.spot-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  flex: 1;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge.available {
+  background: #28a745;
+  color: white;
+}
+
+.badge.full {
+  background: #ff6b6b;
+  color: white;
+}
+
+.spot-info {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  color: #b0b0b0;
+}
+
+.spot-bar {
+  width: 100%;
+  height: 6px;
+  background: #2a5f7f;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.spot-used {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #ffd700 100%);
+  transition: width 0.3s;
+}
+
+.no-spots {
+  text-align: center;
+  color: #b0b0b0;
+  padding: 40px 20px;
+}
+
+@media (max-width: 1024px) {
+  .parking-spots-list {
+    width: 300px;
+  }
+}
+
+@media (max-width: 768px) {
+  .parking-map-content {
+    flex-direction: column;
+  }
+
+  .parking-spots-list {
+    width: 100%;
+    max-height: 40vh;
+    border-left: none;
+    border-top: 1px solid #0f3460;
+  }
+
+  .map-wrapper {
+    height: 60vh;
+  }
+}

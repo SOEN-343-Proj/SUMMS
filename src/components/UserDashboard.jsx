@@ -1,8 +1,32 @@
+import { useState } from 'react'
 import '../styles/UserDashboard.css'
+import ParkingSearch from './ParkingSearch'
+import ParkingMap from './ParkingMap'
 
 function UserDashboard({ user, onLogout }) {
+  const [showParkingSearch, setShowParkingSearch] = useState(false)
+  const [parkingLocation, setParkingLocation] = useState(null)
+
+  const handleParkingSearch = (location) => {
+    setParkingLocation(location)
+    setShowParkingSearch(false)
+  }
+
+  const handleCloseParkingMap = () => {
+    setParkingLocation(null)
+  }
+
   return (
     <div className="user-dashboard">
+      {showParkingSearch && (
+        <ParkingSearch
+          onSearch={handleParkingSearch}
+          onClose={() => setShowParkingSearch(false)}
+        />
+      )}
+
+      {parkingLocation && <ParkingMap searchLocation={parkingLocation} onClose={handleCloseParkingMap} />}
+
       <div className="dashboard-header">
         <div>
           <h1>Welcome to SUMMS</h1>
@@ -18,7 +42,9 @@ function UserDashboard({ user, onLogout }) {
         <div className="dashboard-section">
           <h2> Find Parking </h2>
           <p className="section-info">Find parking spots near your location</p>
-          <button className="action-btn">Search</button>
+          <button className="action-btn" onClick={() => setShowParkingSearch(true)}>
+            Search
+          </button>
         </div>
 
         <div className="dashboard-section">
