@@ -148,6 +148,7 @@
 
 .address-input-wrapper {
   position: relative;
+  width: 100%;
 }
 
 .address-form input {
@@ -158,7 +159,7 @@
   border-radius: 10px;
   color: white;
   font-size: 15px;
-  transition: all 0.3s;
+  transition: border-color 0.2s;
   box-sizing: border-box;
 }
 
@@ -181,10 +182,11 @@
   border: 2px solid #2a5f7f;
   border-top: none;
   border-radius: 0 0 10px 10px;
-  max-height: 300px;
+  max-height: 320px;
   overflow-y: auto;
   z-index: 1000;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  will-change: transform;
 }
 
 .suggestions-dropdown::-webkit-scrollbar {

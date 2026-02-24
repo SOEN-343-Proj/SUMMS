@@ -10,7 +10,7 @@ function ParkingSearch({ onSearch, onClose }) {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const debounceTimerRef = useRef(null)
 
-  // Fetch suggestions from Nominatim API
+  // Fetch suggestions from Nominatim API using bounding box for Montreal/Laval area
   useEffect(() => {
     if (!address.trim() || searchType !== 'address') {
       setSuggestions([])
@@ -23,12 +23,16 @@ function ParkingSearch({ onSearch, onClose }) {
       clearTimeout(debounceTimerRef.current)
     }
 
-    // Set new timer for debouncing
+    // Set new timer for debouncing (150ms for snappier response)
     debounceTimerRef.current = setTimeout(async () => {
       try {
         setLoading(true)
+        // Bounding box for Montreal/Laval area
+        // Format: minlon,minlat,maxlon,maxlat
+        const viewbox = '-73.9,45.4,-73.4,45.7'
+        
         const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ', Montreal, Quebec')}&limit=8`
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&viewbox=${viewbox}&bounded=1&limit=12&countrycodes=ca`
         )
         const data = await response.json()
         setSuggestions(data)
@@ -39,7 +43,7 @@ function ParkingSearch({ onSearch, onClose }) {
         setSuggestions([])
         setLoading(false)
       }
-    }, 300) // Wait 300ms after user stops typing
+    }, 150) // Wait 150ms after user stops typing
 
     return () => {
       if (debounceTimerRef.current) {
@@ -180,7 +184,6 @@ function ParkingSearch({ onSearch, onClose }) {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               onFocus={() => address.trim() && suggestions.length > 0 && setShowSuggestions(true)}
-              disabled={loading}
               autoFocus
             />
             
