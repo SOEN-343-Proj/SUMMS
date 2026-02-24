@@ -8,12 +8,10 @@ import UserDashboard from './UserDashboard'
 
 function WelcomePage() {
   const [view, setView] = useState('selection') // selection, userLogin, adminCode, adminLogin, adminDashboard, userDashboard
-  const [adminCodeVerified, setAdminCodeVerified] = useState(false)
   const [loggedInAdmin, setLoggedInAdmin] = useState(null)
   const [loggedInUser, setLoggedInUser] = useState(null)
 
   const handleAdminCodeSuccess = () => {
-    setAdminCodeVerified(true)
     setView('adminLogin')
   }
 
@@ -29,7 +27,6 @@ function WelcomePage() {
 
   const handleBackToSelection = () => {
     setView('selection')
-    setAdminCodeVerified(false)
     setLoggedInAdmin(null)
     setLoggedInUser(null)
   }

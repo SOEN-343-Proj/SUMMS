@@ -170,7 +170,7 @@ def get_all_admins():
     } for admin in admin_credentials]
 
 
-# For demo purposes - print credentials on module load
+#
 if __name__ == "__main__":
     print("=" * 50)
     print("SUMMS Credentials System")
