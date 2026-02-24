@@ -1,27 +1,7 @@
 import { useState } from 'react'
 import '../styles/Login.css'
 
-// User credentials - matches backend/credentials.py
-let userCredentials = [
-  {
-    email: "john.doe@student.com",
-    password: "student123",
-    name: "John Doe",
-    role: "user"
-  },
-  {
-    email: "jane.smith@student.com",
-    password: "student456",
-    name: "Jane Smith",
-    role: "user"
-  },
-  {
-    email: "alex.wilson@student.com",
-    password: "student789",
-    name: "Alex Wilson",
-    role: "user"
-  }
-]
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
 function UserLogin({ onSuccess, onBack }) {
   const [email, setEmail] = useState('')
@@ -29,8 +9,9 @@ function UserLogin({ onSuccess, onBack }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     
     // Basic validation
@@ -50,43 +31,58 @@ function UserLogin({ onSuccess, onBack }) {
     }
 
     if (isSignUp) {
-      // Sign up logic
       if (!name) {
         setError('Please enter your name')
         return
       }
 
-      // Check if email already exists
-      const existingUser = userCredentials.find(u => u.email === email)
-      if (existingUser) {
-        setError('Email already registered. Please login instead.')
-        return
-      }
+      setIsLoading(true)
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/user/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ name, email, password })
+        })
 
-      // Add new user
-      const newUser = {
-        email,
-        password,
-        name,
-        role: "user"
-      }
-      userCredentials.push(newUser)
+        const data = await response.json()
+        if (!response.ok) {
+          setError(data?.detail || 'Registration failed')
+          return
+        }
 
-      setError('')
-      onSuccess({ email, name, role: 'user' })
+        setError('')
+        onSuccess(data.user)
+      } catch {
+        setError('Unable to connect to server. Please try again.')
+      } finally {
+        setIsLoading(false)
+      }
     } else {
-      // Login logic
-      const user = userCredentials.find(
-        u => u.email === email && u.password === password
-      )
+      setIsLoading(true)
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/user/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email, password })
+        })
 
-      if (!user) {
-        setError('Invalid email or password')
-        return
+        const data = await response.json()
+        if (!response.ok) {
+          setError(data?.detail || 'Invalid email or password')
+          return
+        }
+
+        setError('')
+        onSuccess(data.user)
+      } catch {
+        setError('Unable to connect to server. Please try again.')
+      } finally {
+        setIsLoading(false)
       }
-
-      setError('')
-      onSuccess({ email: user.email, name: user.name, role: 'user' })
     }
   }
 
@@ -137,7 +133,7 @@ function UserLogin({ onSuccess, onBack }) {
 
         <div className="button-group">
           <button type="submit" className="submit-btn">
-            {isSignUp ? 'Sign Up' : 'Login'}
+            {isLoading ? (isSignUp ? 'Signing up...' : 'Logging in...') : (isSignUp ? 'Sign Up' : 'Login')}
           </button>
           <button type="button" className="back-btn" onClick={onBack}>
             Back

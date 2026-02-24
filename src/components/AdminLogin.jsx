@@ -1,43 +1,43 @@
 import { useState } from 'react'
 import '../styles/Login.css'
 
-// Admin credentials - matches backend/credentials.py
-const adminCredentials = [
-  {
-    email: "admin@summs.com",
-    password: "SecureAdmin123!",
-    name: "System Administrator",
-    code: "ADMIN2025",
-    role: "admin"
-  }
-]
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
 function AdminLogin({ onSuccess, onBack }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    // Find matching admin
-    const admin = adminCredentials.find(
-      a => a.email === email && a.password === password
-    )
-    
-    if (!admin) {
-      setError('Invalid admin credentials')
-      return
-    }
 
-    // Login successful
-    setError('')
-    onSuccess({
-      email: admin.email,
-      name: admin.name,
-      code: admin.code,
-      type: 'admin'
-    })
+    setIsLoading(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password })
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        setError(data?.detail || 'Invalid admin credentials')
+        return
+      }
+
+      setError('')
+      onSuccess({
+        ...data.admin,
+        type: 'admin'
+      })
+    } catch {
+      setError('Unable to connect to server. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -74,7 +74,7 @@ function AdminLogin({ onSuccess, onBack }) {
 
         <div className="button-group">
           <button type="submit" className="submit-btn">
-            Login as Admin
+            {isLoading ? 'Logging in...' : 'Login as Admin'}
           </button>
           <button type="button" className="back-btn" onClick={onBack}>
             Back

@@ -5,6 +5,35 @@ This backend module manages user and admin authentication for the SUMMS (Student
 ## Structure
 
 - `credentials.py` - Python module containing user/admin credential lists and authentication functions
+- `main.py` - FastAPI application entry point with authentication endpoints
+
+## FastAPI Setup
+
+Install backend dependencies:
+
+```bash
+pip install -r src/backend/requirements.txt
+```
+
+Run the API server from the project root:
+
+```bash
+uvicorn src.backend.main:app --reload
+```
+
+Then open:
+
+- API docs: `http://127.0.0.1:8000/docs`
+- Health check: `http://127.0.0.1:8000/health`
+
+### Available API Endpoints
+
+- `POST /auth/admin/code` - verify admin code
+- `POST /auth/admin/login` - admin login
+- `POST /auth/user/login` - user login
+- `POST /auth/user/register` - user registration
+- `GET /users` - list all users
+- `GET /admins` - list all admins
 
 ## Credentials Lists
 
