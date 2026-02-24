@@ -1,0 +1,93 @@
+.admin-dashboard {
+    background: rgba(40, 44, 52, 0.95);
+    padding: 30px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: 900px;
+    width: 100%;
+    color: #fff;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid rgba(225, 255, 115, 0.3);
+}
+
+.dashboard-header h1 {
+    color: #e1ff73;
+    margin: 0 0 10px 0;
+}
+
+.welcome-text {
+    color: #ccc;
+    margin: 5px 0;
+    font-size: 1.1rem;
+}
+
+.admin-code {
+    color: #999;
+    margin: 5px 0;
+    font-size: 0.9rem;
+}
+
+.logout-btn {
+    padding: 12px 30px;
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.analytics-placeholder {
+    background: rgba(50, 55, 65, 0.8);
+    padding: 60px 40px;
+    border-radius: 8px;
+    text-align: center;
+    border: 2px dashed rgba(225, 255, 115, 0.3);
+}
+
+.analytics-placeholder h2 {
+    color: #e1ff73;
+    margin: 0 0 20px 0;
+    font-size: 2rem;
+}
+
+.analytics-placeholder p {
+    color: #ccc;
+    font-size: 1.1rem;
+    margin: 15px 0;
+}
+
+.placeholder-note {
+    color: #999;
+    font-size: 0.95rem;
+    font-style: italic;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .admin-dashboard {
+        padding: 20px;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .analytics-placeholder {
+        padding: 40px 20px;
+    }
+
+    .analytics-placeholder h2 {
+        font-size: 1.5rem;
+    }
+}
