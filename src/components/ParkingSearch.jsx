@@ -193,7 +193,8 @@ function ParkingSearch({ onSearch, onClose }) {
                   // Parse the display name for better formatting
                   const parts = suggestion.display_name.split(',')
                   const address = parts[0].trim() // e.g., "413 Rue Olivier-Chauveau"
-                  const city = parts.slice(1, 3).join(',').trim() // e.g., "Auteuil, Quebec"
+                  const city = parts[1]?.trim() // e.g., "Auteuil"
+                  const fullAddress = city ? `${address}, ${city}` : address
                   
                   return (
                     <div
@@ -201,12 +202,9 @@ function ParkingSearch({ onSearch, onClose }) {
                       className="suggestion-item"
                       onClick={() => handleSuggestionClick(suggestion)}
                     >
+                      <span className="suggestion-icon">📍</span>
                       <div className="suggestion-text">
-                        <div className="suggestion-main">{address}</div>
-                        <div className="suggestion-secondary">
-                          <span className="location-icon">📍</span>
-                          {city}
-                        </div>
+                        <div className="suggestion-main">{fullAddress}</div>
                       </div>
                     </div>
                   )
