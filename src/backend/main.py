@@ -2,8 +2,21 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 import math
+import os
+import time
+from typing import Any
+from urllib.parse import quote_plus
+from urllib.request import urlopen
+import json
 
 mapsApiKey = "AIzaSyAOVjtt-TvPi31gZcmeedmc4-cMrq9jO5A"
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", mapsApiKey)
+
+CACHE_TTL_NEARBY_SECONDS = 900
+CACHE_TTL_GEOCODE_SECONDS = 86400
+CACHE_MAX_ENTRIES = 500
+NEARBY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+GEOCODE_CACHE: dict[str, tuple[float, tuple[float, float]]] = {}
 
 try:
     from .credentials import (
@@ -41,12 +54,12 @@ class RegisterRequest(BaseModel):
 
 
 class ParkingSpot(BaseModel):
-    id: int
+    id: str
     lat: float
     lng: float
     name: str
-    available: int
-    total: int
+    address: str | None = None
+    distance_km: float | None = None
 
 
 class NearbyParkingResponse(BaseModel):
@@ -71,17 +84,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mock parking data for Montreal/Laval area
-MOCK_PARKING_SPOTS = [
-    {"id": 1, "lat": 45.5017, "lng": -73.5673, "name": "Downtown Montreal Garage", "available": 12, "total": 50},
-    {"id": 2, "lat": 45.4973, "lng": -73.5724, "name": "Old Port Parking", "available": 3, "total": 30},
-    {"id": 3, "lat": 45.5089, "lng": -73.5628, "name": "McGill Lot", "available": 25, "total": 100},
-    {"id": 4, "lat": 45.5210, "lng": -73.5834, "name": "Outremont Parking", "available": 18, "total": 40},
-    {"id": 5, "lat": 45.6055, "lng": -73.5465, "name": "Laval Downtown", "available": 8, "total": 35},
-    {"id": 6, "lat": 45.4210, "lng": -73.4724, "name": "South Shore Lot", "available": 35, "total": 80},
-]
-
-
 def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Calculate distance between two coordinates using Haversine formula (in km)"""
     R = 6371  # Earth's radius in km
@@ -95,18 +97,98 @@ def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
     return R * c
 
 
-def get_nearby_parking_spots(lat: float, lng: float, radius_km: float = 5) -> list[dict]:
-    """Get parking spots within radius_km of given coordinates, sorted by distance"""
-    nearby_spots = []
-    
-    for spot in MOCK_PARKING_SPOTS:
-        distance = calculate_distance(lat, lng, spot["lat"], spot["lng"])
-        if distance <= radius_km:
-            nearby_spots.append({**spot, "distance": round(distance, 2)})
-    
-    # Sort by distance
-    nearby_spots.sort(key=lambda x: x["distance"])
-    return nearby_spots
+def fetch_google_json(url: str) -> dict[str, Any]:
+    with urlopen(url) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def get_cache_value(cache: dict[str, tuple[float, Any]], key: str, ttl_seconds: int) -> Any | None:
+    item = cache.get(key)
+    if not item:
+        return None
+
+    created_at, value = item
+    if (time.time() - created_at) > ttl_seconds:
+        del cache[key]
+        return None
+
+    return value
+
+
+def set_cache_value(cache: dict[str, tuple[float, Any]], key: str, value: Any) -> None:
+    if len(cache) >= CACHE_MAX_ENTRIES:
+        oldest_key = min(cache, key=lambda item_key: cache[item_key][0])
+        del cache[oldest_key]
+
+    cache[key] = (time.time(), value)
+
+
+def geocode_google_address(address: str) -> tuple[float, float]:
+    normalized_address = " ".join(address.strip().lower().split())
+    cache_key = f"geocode:{normalized_address}"
+    cached_coords = get_cache_value(GEOCODE_CACHE, cache_key, CACHE_TTL_GEOCODE_SECONDS)
+    if cached_coords:
+        return cached_coords
+
+    geocode_url = (
+        "https://maps.googleapis.com/maps/api/geocode/json"
+        f"?address={quote_plus(address)}&key={GOOGLE_MAPS_API_KEY}"
+    )
+    payload = fetch_google_json(geocode_url)
+
+    if payload.get("status") != "OK" or not payload.get("results"):
+        raise HTTPException(status_code=404, detail="Address not found")
+
+    location = payload["results"][0]["geometry"]["location"]
+    coords = (float(location["lat"]), float(location["lng"]))
+    set_cache_value(GEOCODE_CACHE, cache_key, coords)
+    return coords
+
+
+def get_nearby_parking_spots(lat: float, lng: float, radius_km: float = 1) -> list[dict[str, Any]]:
+    """Get nearby parking from Google Places Nearby Search within given radius (km)."""
+    rounded_lat = round(lat, 3)
+    rounded_lng = round(lng, 3)
+    rounded_radius_km = round(radius_km, 1)
+    cache_key = f"nearby:{rounded_lat}:{rounded_lng}:{rounded_radius_km}"
+    cached_spots = get_cache_value(NEARBY_CACHE, cache_key, CACHE_TTL_NEARBY_SECONDS)
+    if cached_spots is not None:
+        return cached_spots
+
+    radius_meters = max(100, min(int(rounded_radius_km * 1000), 50000))
+    nearby_url = (
+        "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        f"?location={rounded_lat},{rounded_lng}&radius={radius_meters}&type=parking&key={GOOGLE_MAPS_API_KEY}"
+    )
+    payload = fetch_google_json(nearby_url)
+
+    if payload.get("status") not in {"OK", "ZERO_RESULTS"}:
+        raise HTTPException(status_code=400, detail=f"Google Places error: {payload.get('status', 'UNKNOWN_ERROR')}")
+
+    results = payload.get("results", [])
+    spots: list[dict[str, Any]] = []
+    for place in results:
+        geometry = place.get("geometry", {}).get("location")
+        if not geometry:
+            continue
+
+        place_lat = float(geometry["lat"])
+        place_lng = float(geometry["lng"])
+        distance = calculate_distance(rounded_lat, rounded_lng, place_lat, place_lng)
+        spots.append(
+            {
+                "id": place.get("place_id", place.get("name", "unknown")),
+                "lat": place_lat,
+                "lng": place_lng,
+                "name": place.get("name", "Parking Spot"),
+                "address": place.get("vicinity"),
+                "distance_km": round(distance, 2),
+            }
+        )
+
+    spots.sort(key=lambda item: item.get("distance_km", 0))
+    set_cache_value(NEARBY_CACHE, cache_key, spots)
+    return spots
 
 
 @app.get("/")
@@ -159,13 +241,29 @@ def list_admins():
 
 
 @app.get("/parking/nearest")
-def get_nearest_parking(lat: float, lng: float, radius: float = 5):
+def get_nearest_parking(
+    lat: float | None = None,
+    lng: float | None = None,
+    radius: float = 1,
+    address: str | None = None,
+):
     """Get nearest available parking spots for given coordinates"""
     try:
+        if not GOOGLE_MAPS_API_KEY:
+            raise HTTPException(status_code=500, detail="Google Maps API key is not configured")
+
+        if address:
+            lat, lng = geocode_google_address(address)
+
+        if lat is None or lng is None:
+            raise HTTPException(status_code=400, detail="Provide either address or both lat/lng coordinates")
+
         nearby_spots = get_nearby_parking_spots(lat, lng, radius)
         return NearbyParkingResponse(
-            spots=[ParkingSpot(**{k: v for k, v in spot.items() if k != "distance"}) for spot in nearby_spots],
+            spots=[ParkingSpot(**spot) for spot in nearby_spots],
             count=len(nearby_spots)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error fetching parking spots: {str(e)}")

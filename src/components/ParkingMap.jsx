@@ -20,28 +20,37 @@ function ParkingMap({ onClose }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const markersRef = useRef([])
-
-  // Calculate distance between two points (in km)
-  const calculateDistance = (lat1, lng1, lat2, lng2) => {
-    const R = 6371 // Earth's radius in km
-    const dLat = ((lat2 - lat1) * Math.PI) / 180
-    const dLng = ((lng2 - lng1) * Math.PI) / 180
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
-  }
+  const searchCacheRef = useRef(new Map())
 
   // Fetch nearby parking spots from backend
   const getNearbyParkingSpots = async (lat, lng) => {
+    const roundedLat = Number(lat).toFixed(3)
+    const roundedLng = Number(lng).toFixed(3)
+    const cacheKey = `${roundedLat}:${roundedLng}:1`
+    const cachedSpots = searchCacheRef.current.get(cacheKey)
+
+    if (cachedSpots) {
+      setError(null)
+      setParkingSpots(cachedSpots)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`http://localhost:8000/parking/nearest?lat=${lat}&lng=${lng}&radius=5`)
+      const response = await fetch(`http://localhost:8000/parking/nearest?lat=${lat}&lng=${lng}&radius=1`)
       if (!response.ok) throw new Error('Failed to fetch parking spots')
       const data = await response.json()
-      setParkingSpots(data.spots || [])
+      const spots = data.spots || []
+      setParkingSpots(spots)
+
+      if (searchCacheRef.current.size >= 50) {
+        const oldestKey = searchCacheRef.current.keys().next().value
+        if (oldestKey) {
+          searchCacheRef.current.delete(oldestKey)
+        }
+      }
+      searchCacheRef.current.set(cacheKey, spots)
     } catch (err) {
       setError(err.message)
       setParkingSpots([])
@@ -57,11 +66,23 @@ function ParkingMap({ onClose }) {
     if (!mapInstanceRef.current) {
       mapInstanceRef.current = L.map(mapRef.current).setView([45.55, -73.6], 12)
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors',
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        maxZoom: 20,
+        attribution: '© OpenStreetMap contributors © CARTO',
       }).addTo(mapInstanceRef.current)
     }
+  }, [])
+
+  useEffect(() => {
+    if (!searchLocation || !mapInstanceRef.current) return
+
+    mapInstanceRef.current.setView([searchLocation.lat, searchLocation.lng], 15)
+    getNearbyParkingSpots(searchLocation.lat, searchLocation.lng)
+  }, [searchLocation])
+
+  useEffect(() => {
+    if (!mapInstanceRef.current) return
 
     // If no search location, clear markers and return
     if (!searchLocation) {
@@ -74,13 +95,9 @@ function ParkingMap({ onClose }) {
     markersRef.current.forEach((marker) => marker.remove())
     markersRef.current = []
 
-    // Update map view to search location
-    mapInstanceRef.current.setView([searchLocation.lat, searchLocation.lng], 14)
+    const markerBounds = [[searchLocation.lat, searchLocation.lng]]
 
-    // Fetch nearby parking spots
-    getNearbyParkingSpots(searchLocation.lat, searchLocation.lng)
-
-    // Add user location marker
+    // Add searched location marker
     const userMarker = L.marker([searchLocation.lat, searchLocation.lng], {
       icon: L.icon({
         iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
@@ -90,31 +107,45 @@ function ParkingMap({ onClose }) {
         popupAnchor: [1, -34],
       }),
     })
-      .bindPopup('<strong>Your Location</strong>')
+      .bindPopup('<strong>Searched Location</strong>')
       .addTo(mapInstanceRef.current)
     markersRef.current.push(userMarker)
 
-    // Add parking spot markers
+    // Show 1km search radius
+    const radiusCircle = L.circle([searchLocation.lat, searchLocation.lng], {
+      radius: 1000,
+      color: '#3b82f6',
+      weight: 2,
+      fillColor: '#3b82f6',
+      fillOpacity: 0.08,
+    }).addTo(mapInstanceRef.current)
+    markersRef.current.push(radiusCircle)
+
+    // Add parking spot pings
     parkingSpots.forEach((spot) => {
-      const isAvailable = spot.available > 0
-      const markerColor = isAvailable ? 'green' : 'red'
+      markerBounds.push([spot.lat, spot.lng])
 
       const marker = L.circleMarker([spot.lat, spot.lng], {
-        radius: 12,
-        fillColor: markerColor,
+        radius: 10,
+        fillColor: '#22c55e',
         color: '#fff',
         weight: 2,
         opacity: 1,
-        fillOpacity: 0.8,
+        fillOpacity: 0.9,
       })
         .bindPopup(
           `<strong>${spot.name}</strong><br/>
-          Available: ${spot.available}/${spot.total}<br/>
-          ${isAvailable ? '✓ Spots Available' : '✗ Full'}`
+          ${spot.address || 'Address unavailable'}<br/>
+          ${spot.distance_km ? `${spot.distance_km} km away` : ''}`
         )
         .addTo(mapInstanceRef.current)
 
       markersRef.current.push(marker)
+    })
+
+    mapInstanceRef.current.fitBounds(markerBounds, {
+      padding: [40, 40],
+      maxZoom: 16,
     })
   }, [searchLocation, parkingSpots])
 
@@ -142,25 +173,24 @@ function ParkingMap({ onClose }) {
         {searchLocation && (
           <div className="parking-spots-list">
             <h3>Available Parking Spots ({parkingSpots.length})</h3>
+            {loading && <p className="spot-info">Searching nearby parking...</p>}
+            {error && <p className="no-spots">{error}</p>}
             {parkingSpots.length > 0 ? (
               <div className="spots-scroll">
                 {parkingSpots.map((spot) => (
-                  <div key={spot.id} className={`spot-card ${spot.available > 0 ? 'available' : 'full'}`}>
+                  <div key={spot.id} className="spot-card available">
                     <div className="spot-header">
                       <h4>{spot.name}</h4>
-                      <span className={`badge ${spot.available > 0 ? 'available' : 'full'}`}>
-                        {spot.available > 0 ? `${spot.available} Available` : 'Full'}
+                      <span className="badge available">
+                        {spot.distance_km ? `${spot.distance_km} km` : 'Parking'}
                       </span>
                     </div>
-                    <p className="spot-info">{spot.available} of {spot.total} spaces available</p>
-                    <div className="spot-bar">
-                      <div className="spot-used" style={{ width: `${((spot.total - spot.available) / spot.total) * 100}%` }}></div>
-                    </div>
+                    <p className="spot-info">{spot.address || 'Address unavailable'}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="no-spots">No parking spots found nearby</p>
+              !loading && <p className="no-spots">No parking spots found within 1km</p>
             )}
           </div>
         )}
