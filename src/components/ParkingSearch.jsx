@@ -1,20 +1,63 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import '../styles/ParkingSearch.css'
 
 function ParkingSearch({ onSearch, onClose }) {
   const [searchType, setSearchType] = useState(null)
   const [address, setAddress] = useState('')
+  const [suggestions, setSuggestions] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const debounceTimerRef = useRef(null)
+
+  // Fetch suggestions from Nominatim API
+  useEffect(() => {
+    if (!address.trim() || searchType !== 'address') {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
+    // Set new timer for debouncing
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        setLoading(true)
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ', Montreal, Quebec')}&limit=8`
+        )
+        const data = await response.json()
+        setSuggestions(data)
+        setShowSuggestions(data.length > 0)
+        setLoading(false)
+      } catch (err) {
+        console.error(err)
+        setSuggestions([])
+        setLoading(false)
+      }
+    }, 300) // Wait 300ms after user stops typing
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [address, searchType])
 
   // Geocode address using OpenStreetMap Nominatim API
   const geocodeAddress = async (addressString) => {
     try {
       setLoading(true)
       setError('')
+      setSuggestions([])
+      setShowSuggestions(false)
 
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString + ', Montreal, Quebec')}`
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`
       )
       const data = await response.json()
 
@@ -31,6 +74,15 @@ function ParkingSearch({ onSearch, onClose }) {
       console.error(err)
       setLoading(false)
     }
+  }
+
+  // Handle suggestion click
+  const handleSuggestionClick = (suggestion) => {
+    const { lat, lon, display_name } = suggestion
+    setAddress(display_name)
+    setSuggestions([])
+    setShowSuggestions(false)
+    onSearch({ lat: parseFloat(lat), lng: parseFloat(lon), searchType: 'address' })
   }
 
   // Use geolocation API
@@ -121,14 +173,49 @@ function ParkingSearch({ onSearch, onClose }) {
         </div>
 
         <form onSubmit={handleAddressSubmit} className="address-form">
-          <input
-            type="text"
-            placeholder="e.g., 1000 Rue Saint-Antoine, Montreal"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            disabled={loading}
-            autoFocus
-          />
+          <div className="address-input-wrapper">
+            <input
+              type="text"
+              placeholder="e.g., 1000 Rue Saint-Antoine, Montreal"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              onFocus={() => address.trim() && suggestions.length > 0 && setShowSuggestions(true)}
+              disabled={loading}
+              autoFocus
+            />
+            
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="suggestions-dropdown">
+                {suggestions.map((suggestion, index) => (
+                  <div
+                    key={index}
+                    className="suggestion-item"
+                    onClick={() => handleSuggestionClick(suggestion)}
+                  >
+                    <span className="suggestion-icon">📍</span>
+                    <div className="suggestion-text">
+                      <div className="suggestion-main">{suggestion.display_name.split(',')[0]}</div>
+                      <div className="suggestion-secondary">
+                        {suggestion.display_name
+                          .split(',')
+                          .slice(1, 3)
+                          .join(',')
+                          .trim()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {loading && (
+              <div className="suggestions-dropdown">
+                <div className="suggestion-loading">
+                  <span className="spinner-small"></span> Searching...
+                </div>
+              </div>
+            )}
+          </div>
           <button type="submit" disabled={loading || !address.trim()}>
             {loading ? 'Searching...' : 'Search'}
           </button>
