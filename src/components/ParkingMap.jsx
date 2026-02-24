@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import '../styles/ParkingMap.css'
+import ParkingSearch from './ParkingSearch'
 
 // Fix default marker icons
 delete L.Icon.Default.prototype._getIconUrl
@@ -21,9 +22,10 @@ const MOCK_PARKING_SPOTS = [
   { id: 6, lat: 45.4210, lng: -73.4724, name: 'South Shore Lot', available: 35, total: 80 },
 ]
 
-function ParkingMap({ searchLocation, onClose, searchType }) {
+function ParkingMap({ onClose }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
+  const [searchLocation, setSearchLocation] = useState(null)
   const [parkingSpots, setParkingSpots] = useState([])
   const markersRef = useRef([])
 
@@ -52,23 +54,31 @@ function ParkingMap({ searchLocation, onClose, searchType }) {
   }
 
   useEffect(() => {
-    if (!mapRef.current || !searchLocation) return
+    if (!mapRef.current) return
 
-    // Initialize map
+    // Initialize map centered on Montreal/Laval
     if (!mapInstanceRef.current) {
-      mapInstanceRef.current = L.map(mapRef.current).setView([searchLocation.lat, searchLocation.lng], 14)
+      mapInstanceRef.current = L.map(mapRef.current).setView([45.55, -73.6], 12)
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap contributors',
       }).addTo(mapInstanceRef.current)
-    } else {
-      mapInstanceRef.current.setView([searchLocation.lat, searchLocation.lng], 14)
+    }
+
+    // If no search location, clear markers and return
+    if (!searchLocation) {
+      markersRef.current.forEach((marker) => marker.remove())
+      markersRef.current = []
+      return
     }
 
     // Clear existing markers
     markersRef.current.forEach((marker) => marker.remove())
     markersRef.current = []
+
+    // Update map view to search location
+    mapInstanceRef.current.setView([searchLocation.lat, searchLocation.lng], 14)
 
     // Get nearby parking spots
     const nearbySpots = getNearbyParkingSpots(searchLocation.lat, searchLocation.lng)
@@ -114,6 +124,13 @@ function ParkingMap({ searchLocation, onClose, searchType }) {
 
   return (
     <div className="parking-map-container">
+      {!searchLocation && (
+        <ParkingSearch
+          onSearch={(location) => setSearchLocation(location)}
+          onClose={onClose}
+        />
+      )}
+
       <div className="parking-map-header">
         <h2>Find Parking Near You</h2>
         <button className="close-btn" onClick={onClose}>
@@ -126,29 +143,31 @@ function ParkingMap({ searchLocation, onClose, searchType }) {
           <div ref={mapRef} className="parking-map"></div>
         </div>
 
-        <div className="parking-spots-list">
-          <h3>Available Parking Spots ({parkingSpots.length})</h3>
-          {parkingSpots.length > 0 ? (
-            <div className="spots-scroll">
-              {parkingSpots.map((spot) => (
-                <div key={spot.id} className={`spot-card ${spot.available > 0 ? 'available' : 'full'}`}>
-                  <div className="spot-header">
-                    <h4>{spot.name}</h4>
-                    <span className={`badge ${spot.available > 0 ? 'available' : 'full'}`}>
-                      {spot.available > 0 ? `${spot.available} Available` : 'Full'}
-                    </span>
+        {searchLocation && (
+          <div className="parking-spots-list">
+            <h3>Available Parking Spots ({parkingSpots.length})</h3>
+            {parkingSpots.length > 0 ? (
+              <div className="spots-scroll">
+                {parkingSpots.map((spot) => (
+                  <div key={spot.id} className={`spot-card ${spot.available > 0 ? 'available' : 'full'}`}>
+                    <div className="spot-header">
+                      <h4>{spot.name}</h4>
+                      <span className={`badge ${spot.available > 0 ? 'available' : 'full'}`}>
+                        {spot.available > 0 ? `${spot.available} Available` : 'Full'}
+                      </span>
+                    </div>
+                    <p className="spot-info">{spot.available} of {spot.total} spaces available</p>
+                    <div className="spot-bar">
+                      <div className="spot-used" style={{ width: `${((spot.total - spot.available) / spot.total) * 100}%` }}></div>
+                    </div>
                   </div>
-                  <p className="spot-info">{spot.available} of {spot.total} spaces available</p>
-                  <div className="spot-bar">
-                    <div className="spot-used" style={{ width: `${((spot.total - spot.available) / spot.total) * 100}%` }}></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="no-spots">No parking spots found nearby</p>
-          )}
-        </div>
+                ))}
+              </div>
+            ) : (
+              <p className="no-spots">No parking spots found nearby</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
