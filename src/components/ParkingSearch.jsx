@@ -189,25 +189,26 @@ function ParkingSearch({ onSearch, onClose }) {
             
             {showSuggestions && suggestions.length > 0 && (
               <div className="suggestions-dropdown">
-                {suggestions.map((suggestion, index) => (
-                  <div
-                    key={index}
-                    className="suggestion-item"
-                    onClick={() => handleSuggestionClick(suggestion)}
-                  >
-                    <span className="suggestion-icon">📍</span>
-                    <div className="suggestion-text">
-                      <div className="suggestion-main">{suggestion.display_name.split(',')[0]}</div>
-                      <div className="suggestion-secondary">
-                        {suggestion.display_name
-                          .split(',')
-                          .slice(1, 3)
-                          .join(',')
-                          .trim()}
+                {suggestions.map((suggestion, index) => {
+                  // Parse the display name for better formatting
+                  const parts = suggestion.display_name.split(',')
+                  const address = parts[0].trim() // e.g., "413 Rue Olivier-Chauveau"
+                  const city = parts.slice(1, 3).join(',').trim() // e.g., "Auteuil, Quebec"
+                  
+                  return (
+                    <div
+                      key={index}
+                      className="suggestion-item"
+                      onClick={() => handleSuggestionClick(suggestion)}
+                    >
+                      <span className="suggestion-icon">📍</span>
+                      <div className="suggestion-text">
+                        <div className="suggestion-main">{address}</div>
+                        <div className="suggestion-secondary">{city}</div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
