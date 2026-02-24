@@ -84,7 +84,7 @@ function AdminLogin({ onSuccess, onBack }) {
 
       <div className="hint-text">
         <strong>Demo Credentials:</strong><br/>
-        Email: admin@summs.com<br/>
+        Email: admin@cityflow.com<br/>
         Password: SecureAdmin123!<br/>
         Admin Code: ADMIN2025
       </div>

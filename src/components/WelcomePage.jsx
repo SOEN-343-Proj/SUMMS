@@ -33,7 +33,7 @@ function WelcomePage() {
 
   return (
     <div className="main">
-      <h1>SUMMS - Student Union Management System</h1>
+      <h1>CityFlow - Urban Mobility Management</h1>
       
       {view === 'selection' && (
         <div className="selection-container">

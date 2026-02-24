@@ -1,6 +1,6 @@
-# SUMMS Backend - Credentials Management
+# CityFlow Backend - Credentials Management
 
-This backend module manages user and admin authentication for the SUMMS (Student Union Management System).
+This backend module manages user and admin authentication for CityFlow (Urban Mobility Management).
 
 ## Structure
 
@@ -45,7 +45,7 @@ Then open:
 
 | Email | Password | Name | Role |
 |-------|----------|------|------|
-| admin@summs.com | SecureAdmin123! | System Administrator | admin |
+| admin@cityflow.com | SecureAdmin123! | System Administrator | admin |
 
 ### User Accounts
 

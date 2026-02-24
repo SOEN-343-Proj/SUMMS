@@ -1,4 +1,4 @@
-# SUMMS
+# CityFlow
 Smart Urban Mobility Management System
 
 ## How to run

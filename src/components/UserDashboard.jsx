@@ -1,11 +1,17 @@
+import { useState } from 'react'
 import '../styles/UserDashboard.css'
+import ParkingMap from './ParkingMap'
 
 function UserDashboard({ user, onLogout }) {
+  const [showParkingMap, setShowParkingMap] = useState(false)
+
   return (
     <div className="user-dashboard">
+      {showParkingMap && <ParkingMap onClose={() => setShowParkingMap(false)} />}
+
       <div className="dashboard-header">
         <div>
-          <h1>Welcome to SUMMS</h1>
+          <h1>Welcome to CityFlow</h1>
           <p className="welcome-text">Hello, {user.name}!</p>
           <p className="user-email">{user.email}</p>
         </div>
@@ -18,7 +24,9 @@ function UserDashboard({ user, onLogout }) {
         <div className="dashboard-section">
           <h2> Find Parking </h2>
           <p className="section-info">Find parking spots near your location</p>
-          <button className="action-btn">Search</button>
+          <button className="action-btn" onClick={() => setShowParkingMap(true)}>
+            Search
+          </button>
         </div>
 
         <div className="dashboard-section">
