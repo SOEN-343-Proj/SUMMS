@@ -12,21 +12,13 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-// Mock parking data for Montreal/Laval area
-const MOCK_PARKING_SPOTS = [
-  { id: 1, lat: 45.5017, lng: -73.5673, name: 'Downtown Montreal Garage', available: 12, total: 50 },
-  { id: 2, lat: 45.4973, lng: -73.5724, name: 'Old Port Parking', available: 3, total: 30 },
-  { id: 3, lat: 45.5089, lng: -73.5628, name: 'McGill Lot', available: 25, total: 100 },
-  { id: 4, lat: 45.5210, lng: -73.5834, name: 'Outremont Parking', available: 18, total: 40 },
-  { id: 5, lat: 45.6055, lng: -73.5465, name: 'Laval Downtown', available: 8, total: 35 },
-  { id: 6, lat: 45.4210, lng: -73.4724, name: 'South Shore Lot', available: 35, total: 80 },
-]
-
 function ParkingMap({ onClose }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const [searchLocation, setSearchLocation] = useState(null)
   const [parkingSpots, setParkingSpots] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const markersRef = useRef([])
 
   // Calculate distance between two points (in km)
@@ -41,16 +33,21 @@ function ParkingMap({ onClose }) {
     return R * c
   }
 
-  // Filter parking spots within 5km of search location
-  const getNearbyParkingSpots = (lat, lng) => {
-    return MOCK_PARKING_SPOTS.filter((spot) => {
-      const distance = calculateDistance(lat, lng, spot.lat, spot.lng)
-      return distance <= 5
-    }).sort((a, b) => {
-      const distA = calculateDistance(lat, lng, a.lat, a.lng)
-      const distB = calculateDistance(lat, lng, b.lat, b.lng)
-      return distA - distB
-    })
+  // Fetch nearby parking spots from backend
+  const getNearbyParkingSpots = async (lat, lng) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch(`http://localhost:8000/parking/nearest?lat=${lat}&lng=${lng}&radius=5`)
+      if (!response.ok) throw new Error('Failed to fetch parking spots')
+      const data = await response.json()
+      setParkingSpots(data.spots || [])
+    } catch (err) {
+      setError(err.message)
+      setParkingSpots([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -80,9 +77,8 @@ function ParkingMap({ onClose }) {
     // Update map view to search location
     mapInstanceRef.current.setView([searchLocation.lat, searchLocation.lng], 14)
 
-    // Get nearby parking spots
-    const nearbySpots = getNearbyParkingSpots(searchLocation.lat, searchLocation.lng)
-    setParkingSpots(nearbySpots)
+    // Fetch nearby parking spots
+    getNearbyParkingSpots(searchLocation.lat, searchLocation.lng)
 
     // Add user location marker
     const userMarker = L.marker([searchLocation.lat, searchLocation.lng], {
@@ -99,7 +95,7 @@ function ParkingMap({ onClose }) {
     markersRef.current.push(userMarker)
 
     // Add parking spot markers
-    nearbySpots.forEach((spot) => {
+    parkingSpots.forEach((spot) => {
       const isAvailable = spot.available > 0
       const markerColor = isAvailable ? 'green' : 'red'
 
@@ -120,7 +116,7 @@ function ParkingMap({ onClose }) {
 
       markersRef.current.push(marker)
     })
-  }, [searchLocation])
+  }, [searchLocation, parkingSpots])
 
   return (
     <div className="parking-map-container">

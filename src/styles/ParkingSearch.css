@@ -13,7 +13,7 @@
 }
 
 .parking-search-modal {
-  background: #16213e;
+  background: rgba(40, 44, 52, 0.95);
   color: white;
   border-radius: 16px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
@@ -38,7 +38,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 25px;
-  border-bottom: 1px solid #0f3460;
+  border-bottom: 1px solid rgba(225, 255, 115, 0.2);
   position: relative;
 }
 
@@ -46,7 +46,7 @@
   margin: 0;
   font-size: 24px;
   font-weight: 600;
-  color: #ffd700;
+  color: #e1ff73;
 }
 
 .back-btn {
@@ -154,8 +154,8 @@
 .address-form input {
   width: 100%;
   padding: 14px 16px;
-  background: #0f3460;
-  border: 2px solid #2a5f7f;
+  background: rgba(30, 35, 45, 0.9);
+  border: 2px solid rgba(225, 255, 115, 0.2);
   border-radius: 10px;
   color: white;
   font-size: 15px;
@@ -178,8 +178,8 @@
   top: 100%;
   left: 0;
   right: 0;
-  background: #0f3460;
-  border: 2px solid #2a5f7f;
+  background: rgba(40, 44, 52, 0.95);
+  border: 2px solid rgba(225, 255, 115, 0.2);
   border-top: none;
   border-radius: 0 0 10px 10px;
   max-height: 320px;
@@ -194,12 +194,12 @@
 }
 
 .suggestions-dropdown::-webkit-scrollbar-track {
-  background: #0f3460;
+  background: rgba(225, 255, 115, 0.1);
   border-radius: 0 10px 10px 0;
 }
 
 .suggestions-dropdown::-webkit-scrollbar-thumb {
-  background: #667eea;
+  background: rgba(225, 255, 115, 0.4);
   border-radius: 3px;
 }
 
@@ -210,7 +210,7 @@
   padding: 14px 16px;
   cursor: pointer;
   transition: all 0.2s;
-  border-bottom: 1px solid #1a4d6d;
+  border-bottom: 1px solid rgba(225, 255, 115, 0.1);
 }
 
 .suggestion-item:last-child {
@@ -218,7 +218,8 @@
 }
 
 .suggestion-item:hover {
-  background: #1a4d6d;
+  background: rgba(225, 255, 115, 0.1);
+  color: #e1ff73;
 }
 
 .suggestion-icon {
@@ -263,7 +264,7 @@
   justify-content: center;
   gap: 10px;
   padding: 16px;
-  color: #667eea;
+  color: #e1ff73;
   font-size: 14px;
 }
 
@@ -271,8 +272,8 @@
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(102, 126, 234, 0.3);
-  border-top-color: #667eea;
+  border: 2px solid rgba(225, 255, 115, 0.3);
+  border-top-color: #e1ff73;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
