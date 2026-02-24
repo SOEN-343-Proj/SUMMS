@@ -189,32 +189,36 @@ function ParkingSearch({ onSearch, onClose }) {
             
             {showSuggestions && suggestions.length > 0 && (
               <div className="suggestions-dropdown">
-                {suggestions.map((suggestion, index) => {
+                {suggestions.flatMap((suggestion, index) => {
                   // Parse the display name for better formatting
                   const parts = suggestion.display_name.split(',')
-                  let address = parts[0].trim()
+                  let addressPart = parts[0].trim()
                   const city = parts[1]?.trim()
                   
-                  // Clean up address ranges (e.g., "9132;9134;9136;9138" -> "9132-9138")
-                  if (address.includes(';')) {
-                    const numbers = address.split(';')
-                    address = `${numbers[0]}-${numbers[numbers.length - 1]}`
+                  // Check if address has a range (e.g., "9132;9134;9136;9138")
+                  let addresses = []
+                  if (addressPart.includes(';')) {
+                    addresses = addressPart.split(';').map(num => num.trim())
+                  } else {
+                    addresses = [addressPart]
                   }
                   
-                  const fullAddress = city ? `${address}, ${city}` : address
-                  
-                  return (
+                  // Create a suggestion for each address in the range
+                  return addresses.map((addr, addrIndex) => (
                     <div
-                      key={index}
+                      key={`${index}-${addrIndex}`}
                       className="suggestion-item"
-                      onClick={() => handleSuggestionClick(suggestion)}
+                      onClick={() => handleSuggestionClick({
+                        ...suggestion,
+                        display_name: city ? `${addr}, ${city}${suggestion.display_name.includes(',') ? suggestion.display_name.substring(suggestion.display_name.indexOf(',') + city.length + 1) : ''}` : addr
+                      })}
                     >
                       <span className="suggestion-icon">📍</span>
                       <div className="suggestion-text">
-                        <div className="suggestion-main">{fullAddress}</div>
+                        <div className="suggestion-main">{city ? `${addr}, ${city}` : addr}</div>
                       </div>
                     </div>
-                  )
+                  ))
                 })}
               </div>
             )}
