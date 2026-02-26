@@ -5,7 +5,7 @@ Smart Urban Mobility Management System
 **Prior to executing the steps, install React & Node on your device**
 
 1. Clone the repository --> `git clone https://github.com/SOEN-343-Proj/SUMMS.git`
-2. On the project folder, open one terminal (for backend) --> `pip install -r src/backend/requirements.txt` on the IDE terminal & on same terminal `uvicorn src.backend.main:app --reload`
+2. On the project folder, open one terminal (for backend) --> `uvicorn src.backend.main:app --reload`
 3. Open new terminal (for frontend) run --> `npm install` and then on same terminal run --> `npm run dev`
 5. Hover on the localhost link & Ctrl + Click on it
 
