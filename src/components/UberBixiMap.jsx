@@ -47,7 +47,7 @@ function UberBixiMap({ onClose }) {
     }
   }
 
-  function buildUberWebLink(pickup, dropoff) {
+  function buildUberWebLink() {
     const pickup = {
       lat: 45.5017,
       lng: -73.5673,
