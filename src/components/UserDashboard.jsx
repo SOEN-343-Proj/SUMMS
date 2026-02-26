@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import '../styles/UserDashboard.css'
 import ParkingMap from './ParkingMap'
+import UberBixiMap from './UberBixiMap'
 
 function UserDashboard({ user, onLogout }) {
   const [showParkingMap, setShowParkingMap] = useState(false)
+  const [showUberBixiMap, setShowUberBixiMap] = useState(false)
 
   return (
     <div className="user-dashboard">
       {showParkingMap && <ParkingMap onClose={() => setShowParkingMap(false)} />}
+      {showUberBixiMap && <UberBixiMap onClose={() => setShowUberBixiMap(false)} />}
 
       <div className="dashboard-header">
         <div>
@@ -32,7 +35,9 @@ function UserDashboard({ user, onLogout }) {
         <div className="dashboard-section">
           <h2> Find my Uber/Bixi </h2>
           <p className="section-info">Your Uber & Bixi all in one spot</p>
-          <button className="action-btn">Search</button>
+          <button className="action-btn" onClick={() => setShowUberBixiMap(true)}>
+            Search
+          </button>
         </div>
 
         <div className="dashboard-section">
