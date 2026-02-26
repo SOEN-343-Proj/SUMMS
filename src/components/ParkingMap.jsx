@@ -1,28 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
 import '../styles/ParkingMap.css'
 import ParkingSearch from './ParkingSearch'
-
-// Fix default marker icons
-delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
+import LeafletMap from './LeafletMap'
 
 function ParkingMap({ onClose }) {
-  const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
+  const markersRef = useRef([])
+  const searchCacheRef = useRef(new Map())
+
   const [searchLocation, setSearchLocation] = useState(null)
   const [parkingSpots, setParkingSpots] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const markersRef = useRef([])
-  const searchCacheRef = useRef(new Map())
 
-  // Fetch nearby parking spots from backend
   const getNearbyParkingSpots = async (lat, lng) => {
     const roundedLat = Number(lat).toFixed(3)
     const roundedLng = Number(lng).toFixed(3)
@@ -60,44 +51,31 @@ function ParkingMap({ onClose }) {
   }
 
   useEffect(() => {
-    if (!mapRef.current) return
+    const map = mapInstanceRef.current
+    if (!map) return
+    if (!searchLocation) return
 
-    // Initialize map centered on Montreal/Laval
-    if (!mapInstanceRef.current) {
-      mapInstanceRef.current = L.map(mapRef.current).setView([45.55, -73.6], 12)
-
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 20,
-        attribution: '© OpenStreetMap contributors © CARTO',
-      }).addTo(mapInstanceRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!searchLocation || !mapInstanceRef.current) return
-
-    mapInstanceRef.current.setView([searchLocation.lat, searchLocation.lng], 15)
+    map.setView([searchLocation.lat, searchLocation.lng], 15)
     getNearbyParkingSpots(searchLocation.lat, searchLocation.lng)
   }, [searchLocation])
 
   useEffect(() => {
-    if (!mapInstanceRef.current) return
+    const map = mapInstanceRef.current
+    if (!map) return
 
-    // If no search location, clear markers and return
+    // Clear if no location
     if (!searchLocation) {
-      markersRef.current.forEach((marker) => marker.remove())
+      markersRef.current.forEach((layer) => layer.remove())
       markersRef.current = []
       return
     }
 
-    // Clear existing markers
-    markersRef.current.forEach((marker) => marker.remove())
+    // Clear existing
+    markersRef.current.forEach((layer) => layer.remove())
     markersRef.current = []
 
     const markerBounds = [[searchLocation.lat, searchLocation.lng]]
 
-    // Add searched location marker
     const userMarker = L.marker([searchLocation.lat, searchLocation.lng], {
       icon: L.icon({
         iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
@@ -108,20 +86,18 @@ function ParkingMap({ onClose }) {
       }),
     })
       .bindPopup('<strong>Searched Location</strong>')
-      .addTo(mapInstanceRef.current)
+      .addTo(map)
     markersRef.current.push(userMarker)
 
-    // Show 1km search radius
     const radiusCircle = L.circle([searchLocation.lat, searchLocation.lng], {
       radius: 1000,
       color: '#3b82f6',
       weight: 2,
       fillColor: '#3b82f6',
       fillOpacity: 0.08,
-    }).addTo(mapInstanceRef.current)
+    }).addTo(map)
     markersRef.current.push(radiusCircle)
 
-    // Add parking spot pings
     parkingSpots.forEach((spot) => {
       markerBounds.push([spot.lat, spot.lng])
 
@@ -138,15 +114,12 @@ function ParkingMap({ onClose }) {
           ${spot.address || 'Address unavailable'}<br/>
           ${spot.distance_km ? `${spot.distance_km} km away` : ''}`
         )
-        .addTo(mapInstanceRef.current)
+        .addTo(map)
 
       markersRef.current.push(marker)
     })
 
-    mapInstanceRef.current.fitBounds(markerBounds, {
-      padding: [40, 40],
-      maxZoom: 16,
-    })
+    map.fitBounds(markerBounds, { padding: [40, 40], maxZoom: 16 })
   }, [searchLocation, parkingSpots])
 
   return (
@@ -167,7 +140,12 @@ function ParkingMap({ onClose }) {
 
       <div className="parking-map-content">
         <div className="map-wrapper">
-          <div ref={mapRef} className="parking-map"></div>
+          <LeafletMap
+            className="parking-map"
+            onMapReady={(map) => {
+              mapInstanceRef.current = map
+            }}
+          />
         </div>
 
         {searchLocation && (
