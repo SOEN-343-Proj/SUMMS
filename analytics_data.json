@@ -1,0 +1,9 @@
+{
+  "total_requests": 3,
+  "parking_searches": 0,
+  "admin_logins": 1,
+  "user_logins": 0,
+  "service_usage": {
+    "admin_login": 1
+  }
+}
