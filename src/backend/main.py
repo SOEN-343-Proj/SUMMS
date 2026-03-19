@@ -8,6 +8,8 @@ from typing import Any
 from urllib.parse import quote_plus
 from urllib.request import urlopen
 import json
+from .analytics_service import analytics
+from .observer import event_manager
 
 mapsApiKey = "AIzaSyAOVjtt-TvPi31gZcmeedmc4-cMrq9jO5A"
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", mapsApiKey)
@@ -17,8 +19,6 @@ CACHE_TTL_GEOCODE_SECONDS = 86400
 CACHE_MAX_ENTRIES = 500
 NEARBY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 GEOCODE_CACHE: dict[str, tuple[float, tuple[float, float]]] = {}
-
-ANALYTICS_FILE = "analytics_data.json"
 
 try:
     from .credentials import (
@@ -38,7 +38,6 @@ except ImportError:
         register_user,
         verify_admin_code,
     )
-
 
 class AdminCodeRequest(BaseModel):
     code: str
@@ -87,7 +86,7 @@ app.add_middleware(
 
 @app.middleware("http")
 async def track_requests(request, call_next):
-    analytics.track_request()
+    event_manager.notify("request_received")
     response = await call_next(request)
     return response
 
@@ -197,84 +196,6 @@ def get_nearby_parking_spots(lat: float, lng: float, radius_km: float = 1) -> li
     set_cache_value(NEARBY_CACHE, cache_key, spots)
     return spots
 
-class AnalyticsService:
-    def __init__(self):
-        self.total_requests = 0
-        self.parking_searches = 0
-        self.admin_logins = 0
-        self.user_logins = 0
-        self.service_usage = {}
-        self.load()
-
-    def load(self) -> None:
-        if not os.path.exists(ANALYTICS_FILE):
-            self.save()
-            return
-
-        try:
-            with open(ANALYTICS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            self.total_requests = data.get("total_requests", 0)
-            self.parking_searches = data.get("parking_searches", 0)
-            self.admin_logins = data.get("admin_logins", 0)
-            self.user_logins = data.get("user_logins", 0)
-            self.service_usage = data.get("service_usage", {})
-        except Exception:
-            self.total_requests = 0
-            self.parking_searches = 0
-            self.admin_logins = 0
-            self.user_logins = 0
-            self.service_usage = {}
-            self.save()
-
-    def save(self) -> None:
-        data = {
-            "total_requests": self.total_requests,
-            "parking_searches": self.parking_searches,
-            "admin_logins": self.admin_logins,
-            "user_logins": self.user_logins,
-            "service_usage": self.service_usage,
-        }
-
-        with open(ANALYTICS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-
-    def track_request(self) -> None:
-        self.total_requests += 1
-        self.save()
-
-    def track_parking(self) -> None:
-        self.parking_searches += 1
-        self._increment_service("parking")
-        self.save()
-
-    def track_admin_login(self) -> None:
-        self.admin_logins += 1
-        self._increment_service("admin_login")
-        self.save()
-
-    def track_user_login(self) -> None:
-        self.user_logins += 1
-        self._increment_service("user_login")
-        self.save()
-
-    def _increment_service(self, name: str) -> None:
-        if name not in self.service_usage:
-            self.service_usage[name] = 0
-        self.service_usage[name] += 1
-
-    def get_stats(self) -> dict[str, Any]:
-        return {
-            "total_requests": self.total_requests,
-            "parking_searches": self.parking_searches,
-            "admin_logins": self.admin_logins,
-            "user_logins": self.user_logins,
-            "service_usage": self.service_usage,
-        }
-
-analytics = AnalyticsService()
-
 @app.get("/")
 def root():
     return {"message": "CityFlow API backend is running"}
@@ -296,7 +217,7 @@ def admin_login(payload: LoginRequest):
     if not admin:
         raise HTTPException(status_code=401, detail="Invalid admin credentials")
     
-    analytics.track_admin_login()
+    event_manager.notify("admin_login", {"email": payload.email})
 
     return {"success": True, "admin": admin}
 
@@ -306,6 +227,9 @@ def user_login(payload: LoginRequest):
     user = authenticate_user(payload.email, payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid user credentials")
+    
+    event_manager.notify("user_login", {"email": payload.email})
+
     return {"success": True, "user": user}
 
 
@@ -346,6 +270,9 @@ def get_nearest_parking(
             raise HTTPException(status_code=400, detail="Provide either address or both lat/lng coordinates")
 
         nearby_spots = get_nearby_parking_spots(lat, lng, radius)
+
+        event_manager.notify("parking_search", {"lat": lat, "lng": lng, "radius": radius})
+
         return NearbyParkingResponse(
             spots=[ParkingSpot(**spot) for spot in nearby_spots],
             count=len(nearby_spots)

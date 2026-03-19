@@ -1,9 +1,12 @@
 {
-  "total_requests": 3,
-  "parking_searches": 0,
-  "admin_logins": 1,
-  "user_logins": 0,
+  "total_requests": 24,
+  "parking_searches": 1,
+  "admin_logins": 5,
+  "user_logins": 1,
+  "uber_bixi_searches": 0,
   "service_usage": {
-    "admin_login": 1
+    "admin_login": 5,
+    "user_login": 1,
+    "parking": 1
   }
 }
