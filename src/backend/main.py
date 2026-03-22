@@ -19,14 +19,7 @@ NEARBY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 GEOCODE_CACHE: dict[str, tuple[float, tuple[float, float]]] = {}
 
 try:
-    from .bixi_rental import (
-        get_bixi_analytics_summary,
-        get_nearby_bixi_stations,
-        get_user_bixi_rental_state,
-        pay_for_bixi_rental,
-        reserve_bixi_bike,
-        return_bixi_rental,
-    )
+    from .bixi_router import router as bixi_router
     from .credentials import (
         authenticate_admin,
         authenticate_user,
@@ -36,14 +29,7 @@ try:
         verify_admin_code,
     )
 except ImportError:
-    from bixi_rental import (  # pragma: no cover
-        get_bixi_analytics_summary,
-        get_nearby_bixi_stations,
-        get_user_bixi_rental_state,
-        pay_for_bixi_rental,
-        reserve_bixi_bike,
-        return_bixi_rental,
-    )
+    from bixi_router import router as bixi_router  # pragma: no cover
     from credentials import (  # pragma: no cover
         authenticate_admin,
         authenticate_user,
@@ -67,21 +53,6 @@ class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
-
-
-class BixiReservationRequest(BaseModel):
-    user_email: EmailStr
-    user_name: str
-    station_id: str
-
-
-class BixiUserRequest(BaseModel):
-    user_email: EmailStr
-
-
-class BixiReturnRequest(BaseModel):
-    user_email: EmailStr
-    return_station_id: str
 
 
 class ParkingSpot(BaseModel):
@@ -114,6 +85,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(bixi_router)
 
 def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Calculate distance between two coordinates using Haversine formula (in km)"""
@@ -269,81 +241,6 @@ def list_users():
 @app.get("/admins")
 def list_admins():
     return {"admins": get_all_admins()}
-
-
-@app.get("/bixi/stations/nearby")
-def list_nearby_bixi_stations(
-    lat: float,
-    lng: float,
-    limit: int = 12,
-    radius: float = 3,
-):
-    try:
-        stations = get_nearby_bixi_stations(lat=lat, lng=lng, limit=limit, radius_km=radius)
-        return {"stations": stations, "count": len(stations)}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Unable to load BIXI stations: {str(e)}")
-
-
-@app.get("/bixi/rentals/state")
-def get_bixi_rental_state(user_email: EmailStr, history_limit: int = 5):
-    try:
-        return get_user_bixi_rental_state(str(user_email), history_limit=history_limit)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unable to load BIXI rental state: {str(e)}")
-
-
-@app.post("/bixi/rentals/reserve")
-def create_bixi_reservation(payload: BixiReservationRequest):
-    try:
-        rental = reserve_bixi_bike(
-            user_email=str(payload.user_email),
-            user_name=payload.user_name,
-            station_id=payload.station_id,
-        )
-        return {"success": True, "rental": rental}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unable to reserve BIXI bike: {str(e)}")
-
-
-@app.post("/bixi/rentals/{rental_id}/pay")
-def pay_bixi_reservation(rental_id: str, payload: BixiUserRequest):
-    try:
-        rental = pay_for_bixi_rental(rental_id=rental_id, user_email=str(payload.user_email))
-        return {"success": True, "rental": rental}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unable to activate BIXI rental: {str(e)}")
-
-
-@app.post("/bixi/rentals/{rental_id}/return")
-def complete_bixi_return(rental_id: str, payload: BixiReturnRequest):
-    try:
-        rental = return_bixi_rental(
-            rental_id=rental_id,
-            user_email=str(payload.user_email),
-            return_station_id=payload.return_station_id,
-        )
-        return {"success": True, "rental": rental}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unable to return BIXI bike: {str(e)}")
-
-
-@app.get("/bixi/analytics/summary")
-def get_bixi_summary():
-    try:
-        return get_bixi_analytics_summary()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unable to load BIXI analytics: {str(e)}")
 
 
 @app.get("/parking/nearest")

@@ -55,11 +55,9 @@ function UserDashboard({ user, onLogout }) {
         </div>
 
         <div className="dashboard-section">
-          <h2> BIXI Rental </h2>
-          <p className="section-info">Reserve, pay for, and return a BIXI bike</p>
-          <button className="action-btn" onClick={() => setShowBixiRental(true)}>
-            Open flow
-          </button>
+          <h2> Rental Service </h2>
+          <p className="section-info">Find and manage rental services</p>
+          <button className="action-btn" onClick={() => setShowBixiRental(true)}>Search</button>
         </div>
       </div>
 

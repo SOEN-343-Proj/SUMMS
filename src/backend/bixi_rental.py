@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import math
 import time
@@ -48,6 +50,137 @@ def _format_timestamp(timestamp: float | None) -> str | None:
     return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(timestamp))
 
 
+def _calculate_duration_minutes(started_at: float | None, returned_at: float | None = None) -> int:
+    if started_at is None:
+        return 0
+
+    end_time = returned_at if returned_at is not None else time.time()
+    return max(1, math.ceil((end_time - started_at) / 60))
+
+
+def _calculate_final_cost(duration_minutes: int) -> float:
+    return round(RENTAL_BASE_FEE + (duration_minutes * RENTAL_PER_MINUTE_RATE), 2)
+
+
+# Each rental phase owns the transitions and station adjustments that are valid from that phase.
+class RentalState:
+    status = 'unknown'
+
+    def pay(self, context: BixiRentalContext) -> None:
+        raise ValueError('Only reserved rentals can be paid and activated.')
+
+    def return_bike(self, context: BixiRentalContext, return_station: dict[str, Any]) -> None:
+        raise ValueError('Only active rentals can be returned.')
+
+    def is_open(self) -> bool:
+        return False
+
+    def is_completed(self) -> bool:
+        return False
+
+    def pickup_bike_delta(self) -> int:
+        return -1
+
+    def pickup_dock_delta(self) -> int:
+        return 0
+
+    def return_bike_delta(self) -> int:
+        return 0
+
+    def return_dock_delta(self) -> int:
+        return 0
+
+
+class ReservedRentalState(RentalState):
+    status = 'reserved'
+
+    def pay(self, context: BixiRentalContext) -> None:
+        context.record['started_at'] = time.time()
+        context.record['authorization_amount'] = PAYMENT_AUTHORIZATION_AMOUNT
+        context.record['payment_status'] = 'authorized'
+        context.transition_to(ACTIVE_RENTAL_STATE)
+
+    def is_open(self) -> bool:
+        return True
+
+
+class ActiveRentalState(RentalState):
+    status = 'active'
+
+    def return_bike(self, context: BixiRentalContext, return_station: dict[str, Any]) -> None:
+        returned_at = time.time()
+        started_at = context.record.get('started_at') or context.record['reserved_at']
+        duration_minutes = _calculate_duration_minutes(started_at, returned_at)
+
+        context.record['return_station'] = _station_summary(return_station)
+        context.record['returned_at'] = returned_at
+        context.record['final_cost'] = _calculate_final_cost(duration_minutes)
+        context.record['payment_status'] = 'captured'
+        context.transition_to(RETURNED_RENTAL_STATE)
+
+    def is_open(self) -> bool:
+        return True
+
+    def pickup_dock_delta(self) -> int:
+        return 1
+
+
+class ReturnedRentalState(RentalState):
+    status = 'returned'
+
+    def is_completed(self) -> bool:
+        return True
+
+    def pickup_dock_delta(self) -> int:
+        return 1
+
+    def return_bike_delta(self) -> int:
+        return 1
+
+    def return_dock_delta(self) -> int:
+        return -1
+
+
+RESERVED_RENTAL_STATE = ReservedRentalState()
+ACTIVE_RENTAL_STATE = ActiveRentalState()
+RETURNED_RENTAL_STATE = ReturnedRentalState()
+
+STATE_BY_STATUS: dict[str, RentalState] = {
+    RESERVED_RENTAL_STATE.status: RESERVED_RENTAL_STATE,
+    ACTIVE_RENTAL_STATE.status: ACTIVE_RENTAL_STATE,
+    RETURNED_RENTAL_STATE.status: RETURNED_RENTAL_STATE,
+}
+
+
+class BixiRentalContext:
+    def __init__(self, record: dict[str, Any]):
+        self.record = record
+        self.state = _state_for_status(str(record['status']))
+
+    def transition_to(self, state: RentalState) -> None:
+        self.state = state
+        self.record['status'] = state.status
+
+    def pay(self) -> None:
+        self.state.pay(self)
+
+    def return_bike(self, return_station: dict[str, Any]) -> None:
+        self.state.return_bike(self, return_station)
+
+    def is_state(self, state: RentalState) -> bool:
+        return self.state is state
+
+    def serialize(self) -> dict[str, Any]:
+        return _serialize_rental(self.record)
+
+
+def _state_for_status(status: str) -> RentalState:
+    state = STATE_BY_STATUS.get(status)
+    if not state:
+        raise ValueError(f'Unsupported BIXI rental status: {status}')
+    return state
+
+
 def _load_station_feed() -> list[dict[str, Any]]:
     cached_age = time.time() - float(_station_cache['fetched_at'])
     if _station_cache['stations'] and cached_age < GBFS_CACHE_TTL_SECONDS:
@@ -90,16 +223,26 @@ def _build_station_deltas() -> tuple[dict[str, int], dict[str, int]]:
     dock_deltas: dict[str, int] = {}
 
     for rental in _bixi_rentals.values():
+        state = _state_for_status(str(rental['status']))
         pickup_station_id = rental['pickup_station']['id']
-        bike_deltas[pickup_station_id] = bike_deltas.get(pickup_station_id, 0) - 1
+        bike_deltas[pickup_station_id] = bike_deltas.get(pickup_station_id, 0) + state.pickup_bike_delta()
 
-        if rental['status'] in {'active', 'returned'}:
-            dock_deltas[pickup_station_id] = dock_deltas.get(pickup_station_id, 0) + 1
+        pickup_dock_delta = state.pickup_dock_delta()
+        if pickup_dock_delta:
+            dock_deltas[pickup_station_id] = dock_deltas.get(pickup_station_id, 0) + pickup_dock_delta
 
-        if rental['status'] == 'returned' and rental.get('return_station'):
-            return_station_id = rental['return_station']['id']
-            bike_deltas[return_station_id] = bike_deltas.get(return_station_id, 0) + 1
-            dock_deltas[return_station_id] = dock_deltas.get(return_station_id, 0) - 1
+        return_station = rental.get('return_station')
+        if not return_station:
+            continue
+
+        return_station_id = return_station['id']
+        return_bike_delta = state.return_bike_delta()
+        return_dock_delta = state.return_dock_delta()
+
+        if return_bike_delta:
+            bike_deltas[return_station_id] = bike_deltas.get(return_station_id, 0) + return_bike_delta
+        if return_dock_delta:
+            dock_deltas[return_station_id] = dock_deltas.get(return_station_id, 0) + return_dock_delta
 
     return bike_deltas, dock_deltas
 
@@ -139,13 +282,7 @@ def _station_summary(station: dict[str, Any]) -> dict[str, Any]:
 def _serialize_rental(rental: dict[str, Any]) -> dict[str, Any]:
     started_at = rental.get('started_at')
     returned_at = rental.get('returned_at')
-
-    if started_at is None:
-        duration_minutes = 0
-    elif returned_at is None:
-        duration_minutes = max(1, math.ceil((time.time() - started_at) / 60))
-    else:
-        duration_minutes = max(1, math.ceil((returned_at - started_at) / 60))
+    duration_minutes = _calculate_duration_minutes(started_at, returned_at)
 
     return {
         'id': rental['id'],
@@ -174,14 +311,26 @@ def _get_station_by_id(station_id: str) -> dict[str, Any] | None:
 
 
 def _get_open_rental_for_user(user_email: str) -> dict[str, Any] | None:
-    open_rentals = [
-        rental
-        for rental in _bixi_rentals.values()
-        if rental['user_email'] == user_email and rental['status'] in {'reserved', 'active'}
-    ]
+    open_rentals: list[dict[str, Any]] = []
+    for rental in _bixi_rentals.values():
+        if rental['user_email'] != user_email:
+            continue
+        if _state_for_status(str(rental['status'])).is_open():
+            open_rentals.append(rental)
+
     if not open_rentals:
         return None
     return max(open_rentals, key=lambda rental: rental['reserved_at'])
+
+
+def _get_rental_context(rental_id: str, user_email: str) -> BixiRentalContext:
+    rental = _bixi_rentals.get(rental_id)
+    if not rental:
+        raise ValueError('BIXI rental was not found.')
+    if rental['user_email'] != user_email:
+        raise ValueError('This rental belongs to another user.')
+
+    return BixiRentalContext(rental)
 
 
 def get_nearby_bixi_stations(
@@ -230,7 +379,7 @@ def reserve_bixi_bike(user_email: str, user_name: str, station_id: str) -> dict[
     rental_id = f'BIXI-{uuid4().hex[:8].upper()}'
     rental_record = {
         'id': rental_id,
-        'status': 'reserved',
+        'status': RESERVED_RENTAL_STATE.status,
         'user_email': user_email,
         'user_name': user_name,
         'pickup_station': _station_summary(station),
@@ -243,33 +392,17 @@ def reserve_bixi_bike(user_email: str, user_name: str, station_id: str) -> dict[
         'payment_status': 'pending',
     }
     _bixi_rentals[rental_id] = rental_record
-    return _serialize_rental(rental_record)
+    return BixiRentalContext(rental_record).serialize()
 
 
 def pay_for_bixi_rental(rental_id: str, user_email: str) -> dict[str, Any]:
-    rental = _bixi_rentals.get(rental_id)
-    if not rental:
-        raise ValueError('BIXI rental was not found.')
-    if rental['user_email'] != user_email:
-        raise ValueError('This rental belongs to another user.')
-    if rental['status'] != 'reserved':
-        raise ValueError('Only reserved rentals can be paid and activated.')
-
-    rental['status'] = 'active'
-    rental['started_at'] = time.time()
-    rental['authorization_amount'] = PAYMENT_AUTHORIZATION_AMOUNT
-    rental['payment_status'] = 'authorized'
-    return _serialize_rental(rental)
+    rental_context = _get_rental_context(rental_id, user_email)
+    rental_context.pay()
+    return rental_context.serialize()
 
 
 def return_bixi_rental(rental_id: str, user_email: str, return_station_id: str) -> dict[str, Any]:
-    rental = _bixi_rentals.get(rental_id)
-    if not rental:
-        raise ValueError('BIXI rental was not found.')
-    if rental['user_email'] != user_email:
-        raise ValueError('This rental belongs to another user.')
-    if rental['status'] != 'active':
-        raise ValueError('Only active rentals can be returned.')
+    rental_context = _get_rental_context(rental_id, user_email)
 
     return_station = _get_station_by_id(return_station_id)
     if not return_station:
@@ -277,25 +410,20 @@ def return_bixi_rental(rental_id: str, user_email: str, return_station_id: str) 
     if not return_station['is_returning'] or return_station['docks_available'] <= 0:
         raise ValueError('No docks are available at the selected return station.')
 
-    rental['status'] = 'returned'
-    rental['return_station'] = _station_summary(return_station)
-    rental['returned_at'] = time.time()
-
-    started_at = rental['started_at'] or rental['reserved_at']
-    duration_minutes = max(1, math.ceil((rental['returned_at'] - started_at) / 60))
-    final_cost = round(RENTAL_BASE_FEE + (duration_minutes * RENTAL_PER_MINUTE_RATE), 2)
-    rental['final_cost'] = final_cost
-    rental['payment_status'] = 'captured'
-    return _serialize_rental(rental)
+    rental_context.return_bike(return_station)
+    return rental_context.serialize()
 
 
 def get_user_bixi_rental_state(user_email: str, history_limit: int = 5) -> dict[str, Any]:
     open_rental = _get_open_rental_for_user(user_email)
-    rental_history = [
-        rental
-        for rental in _bixi_rentals.values()
-        if rental['user_email'] == user_email and rental['status'] == 'returned'
-    ]
+    rental_history: list[dict[str, Any]] = []
+
+    for rental in _bixi_rentals.values():
+        if rental['user_email'] != user_email:
+            continue
+        if _state_for_status(str(rental['status'])).is_completed():
+            rental_history.append(rental)
+
     rental_history.sort(key=lambda rental: rental.get('returned_at') or rental['reserved_at'], reverse=True)
 
     return {
@@ -305,27 +433,35 @@ def get_user_bixi_rental_state(user_email: str, history_limit: int = 5) -> dict[
 
 
 def get_bixi_analytics_summary() -> dict[str, Any]:
-    total_rentals = len(_bixi_rentals)
-    active_rentals = sum(1 for rental in _bixi_rentals.values() if rental['status'] == 'active')
-    reserved_rentals = sum(1 for rental in _bixi_rentals.values() if rental['status'] == 'reserved')
-    completed_rentals = sum(1 for rental in _bixi_rentals.values() if rental['status'] == 'returned')
+    rental_contexts = [BixiRentalContext(rental) for rental in _bixi_rentals.values()]
+    total_rentals = len(rental_contexts)
+    active_rentals = sum(1 for rental_context in rental_contexts if rental_context.is_state(ACTIVE_RENTAL_STATE))
+    reserved_rentals = sum(1 for rental_context in rental_contexts if rental_context.is_state(RESERVED_RENTAL_STATE))
+    completed_rentals = sum(
+        1 for rental_context in rental_contexts if rental_context.is_state(RETURNED_RENTAL_STATE)
+    )
     total_revenue = round(
-        sum(float(rental.get('final_cost') or 0) for rental in _bixi_rentals.values()),
+        sum(float(rental_context.record.get('final_cost') or 0) for rental_context in rental_contexts),
         2,
     )
 
     average_duration_minutes = 0
     completed_durations = [
-        max(1, math.ceil(((rental.get('returned_at') or 0) - (rental.get('started_at') or 0)) / 60))
-        for rental in _bixi_rentals.values()
-        if rental['status'] == 'returned' and rental.get('started_at') and rental.get('returned_at')
+        _calculate_duration_minutes(
+            rental_context.record.get('started_at'),
+            rental_context.record.get('returned_at'),
+        )
+        for rental_context in rental_contexts
+        if rental_context.is_state(RETURNED_RENTAL_STATE)
+        and rental_context.record.get('started_at')
+        and rental_context.record.get('returned_at')
     ]
     if completed_durations:
         average_duration_minutes = round(sum(completed_durations) / len(completed_durations), 1)
 
     pickups_by_station: dict[str, int] = {}
-    for rental in _bixi_rentals.values():
-        station_name = rental['pickup_station']['name']
+    for rental_context in rental_contexts:
+        station_name = rental_context.record['pickup_station']['name']
         pickups_by_station[station_name] = pickups_by_station.get(station_name, 0) + 1
 
     popular_station = None
