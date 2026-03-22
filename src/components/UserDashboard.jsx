@@ -2,15 +2,23 @@ import { useState } from 'react'
 import '../styles/UserDashboard.css'
 import ParkingMap from './ParkingMap'
 import UberBixiMap from './UberBixiMap'
+import BixiRentalFlow from './BixiRentalFlow'
 
 function UserDashboard({ user, onLogout }) {
   const [showParkingMap, setShowParkingMap] = useState(false)
   const [showUberBixiMap, setShowUberBixiMap] = useState(false)
+  const [showBixiRental, setShowBixiRental] = useState(false)
 
   return (
     <div className="user-dashboard">
       {showParkingMap && <ParkingMap onClose={() => setShowParkingMap(false)} />}
       {showUberBixiMap && <UberBixiMap onClose={() => setShowUberBixiMap(false)} />}
+      {showBixiRental && (
+        <BixiRentalFlow
+          user={user}
+          onClose={() => setShowBixiRental(false)}
+        />
+      )}
 
       <div className="dashboard-header">
         <div>
@@ -47,9 +55,11 @@ function UserDashboard({ user, onLogout }) {
         </div>
 
         <div className="dashboard-section">
-          <h2> Rental Service </h2>
-          <p className="section-info">Find and manage rental services</p>
-          <button className="action-btn">Search</button>
+          <h2> BIXI Rental </h2>
+          <p className="section-info">Reserve, pay for, and return a BIXI bike</p>
+          <button className="action-btn" onClick={() => setShowBixiRental(true)}>
+            Open flow
+          </button>
         </div>
       </div>
 

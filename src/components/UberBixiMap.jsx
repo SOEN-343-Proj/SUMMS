@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "../styles/ParkingMap.css";
-import UberBixiSearch from "./UberBixiSearch";
 import LeafletMap from "./LeafletMap";
+import LocationSearchModal from "./LocationSearchModal";
 
 function UberBixiMap({ onClose }) {
   const mapInstanceRef = useRef(null);
@@ -13,42 +13,19 @@ function UberBixiMap({ onClose }) {
   const [error, setError] = useState(null);
 
   const [bixiStations, setBixiStations] = useState([]);
-  const [uberOptions, setUberOptions] = useState([]);
-
-  async function fetchBixiStations(lat, lng) {
-    const stations = await fetchBixiStationsMerged(lat, lng);
-    return stations.slice(0, 25);
-  }
 
   function requestUberFromSearchLocation() {
     if (!searchLocation) {
       return;
     }
 
-    const url = buildUberWebLink(searchLocation, null);
+    const url = buildUberWebLink(searchLocation);
 
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  async function runSearch(lat, lng) {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const stations = await fetchBixiStations(lat, lng);
-      setBixiStations(stations);
-      setUberOptions([]);
-    } catch (e) {
-      setError(e && e.message ? e.message : "Search failed");
-      setBixiStations([]);
-      setUberOptions([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function buildUberWebLink() {
-    const pickup = {
+  function buildUberWebLink(searchPoint) {
+    const pickup = searchPoint ?? {
       lat: 45.5017,
       lng: -73.5673,
     };
@@ -65,9 +42,7 @@ function UberBixiMap({ onClose }) {
     params.set("dropoff[latitude]", dropoff.lat);
     params.set("dropoff[longitude]", dropoff.lng);
 
-    const url = `https://m.uber.com/ul/?${params.toString()}`;
-
-    window.open(url, "_blank", "noopener,noreferrer");
+    return `https://m.uber.com/ul/?${params.toString()}`;
   }
 
   useEffect(() => {
@@ -75,8 +50,39 @@ function UberBixiMap({ onClose }) {
     if (!map) return;
     if (!searchLocation) return;
 
+    let ignore = false;
+
     map.setView([searchLocation.lat, searchLocation.lng], 15);
-    runSearch(searchLocation.lat, searchLocation.lng);
+
+    const searchMobilityOptions = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const stations = await fetchBixiStationsMerged(
+          searchLocation.lat,
+          searchLocation.lng,
+        );
+        if (!ignore) {
+          setBixiStations(stations.slice(0, 25));
+        }
+      } catch (e) {
+        if (!ignore) {
+          setError(e && e.message ? e.message : "Search failed");
+          setBixiStations([]);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+
+    searchMobilityOptions();
+
+    return () => {
+      ignore = true;
+    };
   }, [searchLocation]);
 
   useEffect(() => {
@@ -142,7 +148,8 @@ function UberBixiMap({ onClose }) {
   return (
     <div className="parking-map-container">
       {!searchLocation && (
-        <UberBixiSearch
+        <LocationSearchModal
+          title="Find Uber / BIXI"
           onSearch={(location) => setSearchLocation(location)}
           onClose={onClose}
         />

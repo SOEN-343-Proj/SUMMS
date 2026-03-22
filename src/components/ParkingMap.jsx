@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import '../styles/ParkingMap.css'
-import ParkingSearch from './ParkingSearch'
 import LeafletMap from './LeafletMap'
+import LocationSearchModal from './LocationSearchModal'
 
 function ParkingMap({ onClose }) {
   const mapInstanceRef = useRef(null)
@@ -125,7 +125,8 @@ function ParkingMap({ onClose }) {
   return (
     <div className="parking-map-container">
       {!searchLocation && (
-        <ParkingSearch
+        <LocationSearchModal
+          title="Find Parking"
           onSearch={(location) => setSearchLocation(location)}
           onClose={onClose}
         />
