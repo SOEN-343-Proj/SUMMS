@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
+import '../styles/ParkingMap.css'
 import '../styles/BixiRentalFlow.css'
 import LeafletMap from './LeafletMap'
 import LocationSearchModal from './LocationSearchModal'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+const HISTORY_LIMIT = '5'
+const STATION_SEARCH_LIMIT = '12'
+const STATION_SEARCH_RADIUS = '3'
+const PAYMENT_AUTHORIZATION_AMOUNT = 4.25
 
 async function requestJson(url, options) {
   const response = await fetch(url, options)
@@ -36,6 +41,50 @@ function formatTimestamp(value) {
   return new Date(value).toLocaleString()
 }
 
+function getSavedLocation(rental) {
+  if (!rental?.pickup_station) {
+    return null
+  }
+
+  return {
+    lat: rental.pickup_station.lat,
+    lng: rental.pickup_station.lng,
+    searchType: 'saved-rental',
+  }
+}
+
+function buildStationSearchQuery(location) {
+  return new URLSearchParams({
+    lat: String(location.lat),
+    lng: String(location.lng),
+    limit: STATION_SEARCH_LIMIT,
+    radius: STATION_SEARCH_RADIUS,
+  })
+}
+
+function SummaryGrid({ cards, compact = false }) {
+  return (
+    <section className={`summary-grid ${compact ? 'compact' : ''}`}>
+      {cards.map((card) => (
+        <div key={card.label} className="summary-card">
+          <span>{card.label}</span>
+          <strong>{card.value}</strong>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function StationBadges({ station }) {
+  return (
+    <div className="station-badges">
+      <span className="badge bikes">{station.bikes_available} bikes</span>
+      <span className="badge docks">{station.docks_available} docks</span>
+      <span className="badge distance">{station.distance_km} km</span>
+    </div>
+  )
+}
+
 function BixiRentalFlow({ user, onClose }) {
   const mapInstanceRef = useRef(null)
   const layersRef = useRef([])
@@ -53,39 +102,51 @@ function BixiRentalFlow({ user, onClose }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const selectedStation = stations.find((station) => station.id === selectedStationId) || null
   const nearbyAvailableBikes = stations.reduce((sum, station) => sum + station.bikes_available, 0)
   const nearbyAvailableDocks = stations.reduce((sum, station) => sum + station.docks_available, 0)
-  const selectedStation = stations.find((station) => station.id === selectedStationId) || null
   const isReserved = openRental?.status === 'reserved'
   const isActive = openRental?.status === 'active'
 
+  const rentalCards = [
+    { label: 'Nearby Bikes', value: nearbyAvailableBikes },
+    { label: 'Nearby Docks', value: nearbyAvailableDocks },
+  ]
+
+  const insightCards = [
+    { label: 'Total Rentals', value: analytics?.total_rentals ?? 0 },
+    { label: 'Money Spent', value: formatCurrency(analytics?.total_revenue ?? 0) },
+    { label: 'Completed', value: analytics?.completed_rentals ?? 0 },
+    { label: 'Average Duration', value: `${analytics?.average_duration_minutes ?? 0} min` },
+  ]
+
+  const applyStations = (nextStations) => {
+    setStations(nextStations)
+    setSelectedStationId((current) => {
+      if (current && nextStations.some((station) => station.id === current)) {
+        return current
+      }
+
+      return nextStations[0]?.id || ''
+    })
+  }
+
   const loadStations = async (location) => {
     if (!location) {
-      setStations([])
-      setSelectedStationId('')
+      applyStations([])
       return
     }
 
     setLoadingStations(true)
+    setError('')
+
     try {
-      const query = new URLSearchParams({
-        lat: String(location.lat),
-        lng: String(location.lng),
-        limit: '12',
-        radius: '3',
-      })
+      const query = buildStationSearchQuery(location)
       const data = await requestJson(`${API_BASE_URL}/bixi/stations/nearby?${query.toString()}`)
-      const nextStations = data.stations || []
-      setStations(nextStations)
-      setSelectedStationId((current) => {
-        if (current && nextStations.some((station) => station.id === current)) {
-          return current
-        }
-        return nextStations[0]?.id || ''
-      })
+      applyStations(data.stations || [])
     } catch (err) {
       setError(err.message)
-      setStations([])
+      applyStations([])
     } finally {
       setLoadingStations(false)
     }
@@ -94,7 +155,7 @@ function BixiRentalFlow({ user, onClose }) {
   const loadDashboardData = async () => {
     const query = new URLSearchParams({
       user_email: user.email,
-      history_limit: '5',
+      history_limit: HISTORY_LIMIT,
     })
 
     const [stateData, analyticsData] = await Promise.all([
@@ -106,28 +167,17 @@ function BixiRentalFlow({ user, onClose }) {
     setHistory(stateData.history || [])
     setAnalytics(analyticsData)
 
-    if (!searchLocation && stateData.open_rental?.pickup_station) {
-      setSearchLocation({
-        lat: stateData.open_rental.pickup_station.lat,
-        lng: stateData.open_rental.pickup_station.lng,
-        searchType: 'saved-rental',
-      })
+    const savedLocation = getSavedLocation(stateData.open_rental)
+    if (!searchLocation && savedLocation) {
+      setSearchLocation(savedLocation)
     }
 
-    return stateData
+    return savedLocation
   }
 
   const refreshAfterAction = async () => {
-    const stateData = await loadDashboardData()
-    const locationToUse =
-      searchLocation ||
-      (stateData.open_rental?.pickup_station
-        ? {
-            lat: stateData.open_rental.pickup_station.lat,
-            lng: stateData.open_rental.pickup_station.lng,
-            searchType: 'saved-rental',
-          }
-        : null)
+    const savedLocation = await loadDashboardData()
+    const locationToUse = searchLocation || savedLocation
 
     if (locationToUse) {
       await loadStations(locationToUse)
@@ -135,102 +185,24 @@ function BixiRentalFlow({ user, onClose }) {
   }
 
   useEffect(() => {
-    let ignore = false
-
     const initialize = async () => {
       setLoadingState(true)
       setError('')
+
       try {
-        const query = new URLSearchParams({
-          user_email: user.email,
-          history_limit: '5',
-        })
-
-        const [stateData, analyticsData] = await Promise.all([
-          requestJson(`${API_BASE_URL}/bixi/rentals/state?${query.toString()}`),
-          requestJson(`${API_BASE_URL}/bixi/analytics/summary`),
-        ])
-
-        if (ignore) {
-          return
-        }
-
-        setOpenRental(stateData.open_rental)
-        setHistory(stateData.history || [])
-        setAnalytics(analyticsData)
-
-        if (stateData.open_rental?.pickup_station) {
-          setSearchLocation({
-            lat: stateData.open_rental.pickup_station.lat,
-            lng: stateData.open_rental.pickup_station.lng,
-            searchType: 'saved-rental',
-          })
-        }
+        await loadDashboardData()
       } catch (err) {
-        if (!ignore) {
-          setError(err.message)
-        }
+        setError(err.message)
       } finally {
-        if (!ignore) {
-          setLoadingState(false)
-        }
+        setLoadingState(false)
       }
     }
 
     initialize()
-
-    return () => {
-      ignore = true
-    }
   }, [user.email])
 
   useEffect(() => {
-    if (!searchLocation) {
-      setStations([])
-      setSelectedStationId('')
-      return
-    }
-
-    let ignore = false
-
-    const fetchStations = async () => {
-      try {
-        setLoadingStations(true)
-        const query = new URLSearchParams({
-          lat: String(searchLocation.lat),
-          lng: String(searchLocation.lng),
-          limit: '12',
-          radius: '3',
-        })
-        const data = await requestJson(`${API_BASE_URL}/bixi/stations/nearby?${query.toString()}`)
-        if (ignore) {
-          return
-        }
-
-        const nextStations = data.stations || []
-        setStations(nextStations)
-        setSelectedStationId((current) => {
-          if (current && nextStations.some((station) => station.id === current)) {
-            return current
-          }
-          return nextStations[0]?.id || ''
-        })
-      } catch (err) {
-        if (!ignore) {
-          setError(err.message)
-        }
-      } finally {
-        if (!ignore) {
-          setLoadingStations(false)
-        }
-      }
-    }
-
-    fetchStations()
-
-    return () => {
-      ignore = true
-    }
+    loadStations(searchLocation)
   }, [searchLocation])
 
   useEffect(() => {
@@ -305,7 +277,7 @@ function BixiRentalFlow({ user, onClose }) {
     setNotice('')
 
     try {
-      const data = await requestJson(`${API_BASE_URL}/bixi/rentals/reserve`, {
+      await requestJson(`${API_BASE_URL}/bixi/rentals/reserve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -317,7 +289,6 @@ function BixiRentalFlow({ user, onClose }) {
         }),
       })
 
-      setOpenRental(data.rental)
       setNotice(`Bike reserved at ${station.name}. Complete payment to unlock it.`)
       await refreshAfterAction()
     } catch (err) {
@@ -337,7 +308,7 @@ function BixiRentalFlow({ user, onClose }) {
     setNotice('')
 
     try {
-      const data = await requestJson(`${API_BASE_URL}/bixi/rentals/${openRental.id}/pay`, {
+      await requestJson(`${API_BASE_URL}/bixi/rentals/${openRental.id}/pay`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -347,7 +318,6 @@ function BixiRentalFlow({ user, onClose }) {
         }),
       })
 
-      setOpenRental(data.rental)
       setNotice('Payment authorized. Your BIXI rental is now active.')
       await refreshAfterAction()
     } catch (err) {
@@ -399,7 +369,7 @@ function BixiRentalFlow({ user, onClose }) {
   }
 
   return (
-    <div className="bixi-rental-container">
+    <div className="parking-map-container bixi-rental-container">
       {!searchLocation && (
         <LocationSearchModal
           title="Find BIXI Rental Stations"
@@ -410,7 +380,7 @@ function BixiRentalFlow({ user, onClose }) {
         />
       )}
 
-      <div className="bixi-rental-header">
+      <div className="parking-map-header bixi-rental-header">
         <div>
           <h2>BIXI Rental Pipeline</h2>
           <p>Search stations, reserve a bike, simulate payment, and return it in one flow.</p>
@@ -418,7 +388,7 @@ function BixiRentalFlow({ user, onClose }) {
 
         <div className="bixi-rental-header-actions">
           <button
-            className="header-btn"
+            className="station-action-btn secondary header-btn"
             type="button"
             onClick={() => {
               setNotice('')
@@ -428,23 +398,23 @@ function BixiRentalFlow({ user, onClose }) {
           >
             Search another area
           </button>
-          <button className="header-close-btn" type="button" onClick={onClose}>
-            Close
+          <button className="close-btn" type="button" onClick={onClose}>
+            ✕
           </button>
         </div>
       </div>
 
-      <div className="bixi-rental-content">
-        <div className="bixi-rental-map-wrapper">
+      <div className="parking-map-content">
+        <div className="map-wrapper">
           <LeafletMap
-            className="bixi-rental-map"
+            className="parking-map"
             onMapReady={(map) => {
               mapInstanceRef.current = map
             }}
           />
         </div>
 
-        <aside className="bixi-rental-sidebar">
+        <aside className="parking-spots-list bixi-rental-sidebar">
           {loadingState && <p className="loading-copy">Loading BIXI rental data...</p>}
           {notice && <div className="notice-banner">{notice}</div>}
           {error && <div className="error-banner">{error}</div>}
@@ -468,22 +438,13 @@ function BixiRentalFlow({ user, onClose }) {
 
           {activePage === 'rental' ? (
             <>
-              <section className="summary-grid compact">
-                <div className="summary-card">
-                  <span>Nearby Bikes</span>
-                  <strong>{nearbyAvailableBikes}</strong>
-                </div>
-                <div className="summary-card">
-                  <span>Nearby Docks</span>
-                  <strong>{nearbyAvailableDocks}</strong>
-                </div>
-              </section>
+              <SummaryGrid cards={rentalCards} compact />
 
               {openRental ? (
-                <section className="rental-card">
+                <section className="summary-card rental-card">
                   <div className={`flow-status ${openRental.status}`}>{openRental.status}</div>
                   <h3>Open Rental</h3>
-                  <p>
+                  <p className="spot-info">
                     Pickup station: <strong>{openRental.pickup_station.name}</strong>
                   </p>
 
@@ -516,7 +477,7 @@ function BixiRentalFlow({ user, onClose }) {
                       >
                         {actionLoading === 'pay'
                           ? 'Authorizing payment...'
-                          : `Authorize ${formatCurrency(4.25)} and unlock bike`}
+                          : `Authorize ${formatCurrency(PAYMENT_AUTHORIZATION_AMOUNT)} and unlock bike`}
                       </button>
                     </div>
                   )}
@@ -524,7 +485,7 @@ function BixiRentalFlow({ user, onClose }) {
                   {isActive && (
                     <div className="flow-actions">
                       <button
-                        className="flow-btn secondary"
+                        className="station-action-btn secondary"
                         type="button"
                         onClick={() =>
                           focusStation({
@@ -539,28 +500,26 @@ function BixiRentalFlow({ user, onClose }) {
                   )}
                 </section>
               ) : (
-                <section className="empty-state">
+                <section className="summary-card empty-state">
                   <h3>No Open Rental</h3>
-                  <p>Select a station below to reserve a BIXI bike and start the rental flow.</p>
+                  <p className="spot-info">
+                    Select a station below to reserve a BIXI bike and start the rental flow.
+                  </p>
                 </section>
               )}
 
               {selectedStation && (
-                <section className="selection-card">
+                <section className="summary-card selection-card">
                   <h3>Selected Station</h3>
                   <h4>{selectedStation.name}</h4>
-                  <p>{selectedStation.address || 'Address unavailable'}</p>
-                  <div className="station-badges">
-                    <span className="station-badge bikes">{selectedStation.bikes_available} bikes</span>
-                    <span className="station-badge docks">{selectedStation.docks_available} docks</span>
-                    <span className="station-badge distance">{selectedStation.distance_km} km</span>
-                  </div>
+                  <p className="spot-info">{selectedStation.address || 'Address unavailable'}</p>
+                  <StationBadges station={selectedStation} />
                 </section>
               )}
 
-              <section className="station-list-card">
+              <section className="summary-card station-list-card">
                 <h3>{isActive ? 'Return Stations' : 'Pickup Stations'}</h3>
-                <p>
+                <p className="spot-info">
                   {isActive
                     ? 'Choose any nearby station with free docks to complete the ride.'
                     : 'Reserve from a station that still has at least one bike available.'}
@@ -569,22 +528,18 @@ function BixiRentalFlow({ user, onClose }) {
                 {loadingStations ? (
                   <p className="loading-copy">Loading nearby BIXI stations...</p>
                 ) : stations.length > 0 ? (
-                  <div className="station-list">
+                  <div className="spots-scroll station-list">
                     {stations.map((station) => (
                       <div
                         key={station.id}
-                        className={`station-card ${selectedStationId === station.id ? 'selected' : ''}`}
+                        className={`spot-card station-card ${selectedStationId === station.id ? 'selected' : ''}`}
                       >
-                        <div className="station-card-header">
+                        <div className="spot-header station-card-header">
                           <h4>{station.name}</h4>
-                          <div className="station-badges">
-                            <span className="station-badge bikes">{station.bikes_available} bikes</span>
-                            <span className="station-badge docks">{station.docks_available} docks</span>
-                            <span className="station-badge distance">{station.distance_km} km</span>
-                          </div>
+                          <StationBadges station={station} />
                         </div>
 
-                        <p>{station.address || 'Address unavailable'}</p>
+                        <p className="spot-info">{station.address || 'Address unavailable'}</p>
 
                         <div className="station-actions">
                           <button
@@ -621,44 +576,29 @@ function BixiRentalFlow({ user, onClose }) {
                     ))}
                   </div>
                 ) : (
-                  <p>No stations found for the selected area.</p>
+                  <p className="no-spots">No stations found for the selected area.</p>
                 )}
               </section>
             </>
           ) : (
             <>
-              <section className="insights-intro-card">
+              <section className="summary-card insights-intro-card">
                 <h3>Rental Insights</h3>
-                <p>Analytics and your recent BIXI ride history are grouped here to keep the main rental page focused on actions.</p>
+                <p className="spot-info">
+                  Analytics and your recent BIXI ride history are grouped here to keep the main rental page focused on actions.
+                </p>
               </section>
 
-              <section className="summary-grid">
-                <div className="summary-card">
-                  <span>Total Rentals</span>
-                  <strong>{analytics?.total_rentals ?? 0}</strong>
-                </div>
-                <div className="summary-card">
-                  <span>Money Spent</span>
-                  <strong>{formatCurrency(analytics?.total_revenue ?? 0)}</strong>
-                </div>
-                <div className="summary-card">
-                  <span>Completed</span>
-                  <strong>{analytics?.completed_rentals ?? 0}</strong>
-                </div>
-                <div className="summary-card">
-                  <span>Average Duration</span>
-                  <strong>{analytics?.average_duration_minutes ?? 0} min</strong>
-                </div>
-              </section>
+              <SummaryGrid cards={insightCards} />
 
-              <section className="history-card">
+              <section className="summary-card history-card">
                 <h3>Recent Rental History</h3>
-                <p>Last completed BIXI rides for this user.</p>
+                <p className="spot-info">Last completed BIXI rides for this user.</p>
 
                 {history.length > 0 ? (
-                  <div className="history-list">
+                  <div className="spots-scroll history-list">
                     {history.map((rental) => (
-                      <div key={rental.id} className="history-item">
+                      <div key={rental.id} className="spot-card history-item">
                         <strong>
                           {rental.pickup_station.name} to {rental.return_station?.name || 'Unknown station'}
                         </strong>
@@ -669,7 +609,7 @@ function BixiRentalFlow({ user, onClose }) {
                     ))}
                   </div>
                 ) : (
-                  <p>No completed BIXI rentals yet.</p>
+                  <p className="no-spots">No completed BIXI rentals yet.</p>
                 )}
               </section>
             </>
