@@ -63,6 +63,7 @@ def _calculate_final_cost(duration_minutes: int) -> float:
 
 
 # Each rental phase owns the transitions and station adjustments that are valid from that phase.
+# Base state class defines how methods each state can repsond to, like pay and return bike
 class RentalState:
     status = 'unknown'
 
@@ -90,7 +91,7 @@ class RentalState:
     def return_dock_delta(self) -> int:
         return 0
 
-
+#when status is reserved, user has reserved a bike but has not paid yet. 
 class ReservedRentalState(RentalState):
     status = 'reserved'
 
@@ -103,7 +104,7 @@ class ReservedRentalState(RentalState):
     def is_open(self) -> bool:
         return True
 
-
+# when staus is active, user has paid and can return the bike to a station.
 class ActiveRentalState(RentalState):
     status = 'active'
 
@@ -124,7 +125,7 @@ class ActiveRentalState(RentalState):
     def pickup_dock_delta(self) -> int:
         return 1
 
-
+# when status is returned, user has completed the rental and the bike should be available at the return station.
 class ReturnedRentalState(RentalState):
     status = 'returned'
 
@@ -151,7 +152,8 @@ STATE_BY_STATUS: dict[str, RentalState] = {
     RETURNED_RENTAL_STATE.status: RETURNED_RENTAL_STATE,
 }
 
-
+# BixiRentalContext manages the state of a single rental and 
+# has methods to transition between states, pay for the rental, and return the bike.
 class BixiRentalContext:
     def __init__(self, record: dict[str, Any]):
         self.record = record
@@ -173,7 +175,7 @@ class BixiRentalContext:
     def serialize(self) -> dict[str, Any]:
         return _serialize_rental(self.record)
 
-
+# state look up from the stored status string
 def _state_for_status(status: str) -> RentalState:
     state = STATE_BY_STATUS.get(status)
     if not state:
@@ -217,7 +219,9 @@ def _load_station_feed() -> list[dict[str, Any]]:
     _station_cache['stations'] = merged_stations
     return merged_stations
 
-
+# this function changes the behaviour of the station based on its current status. 
+# For example, if a bike is reserved but not yet paid for, 
+# the bike is not removed from the station availability until the rental is active. 
 def _build_station_deltas() -> tuple[dict[str, int], dict[str, int]]:
     bike_deltas: dict[str, int] = {}
     dock_deltas: dict[str, int] = {}
@@ -309,7 +313,7 @@ def _get_station_by_id(station_id: str) -> dict[str, Any] | None:
             return _apply_station_overlay(station)
     return None
 
-
+# This function checks if the user has an open rental (reserved or active) and returns it.
 def _get_open_rental_for_user(user_email: str) -> dict[str, Any] | None:
     open_rentals: list[dict[str, Any]] = []
     for rental in _bixi_rentals.values():
@@ -365,7 +369,7 @@ def get_nearby_bixi_stations(
 
     return stations_with_distance[: max(1, limit)]
 
-
+# This function creates a new BIXI rental reservation for the user at the selected station.
 def reserve_bixi_bike(user_email: str, user_name: str, station_id: str) -> dict[str, Any]:
     if _get_open_rental_for_user(user_email):
         raise ValueError('This user already has an open BIXI reservation or rental.')
@@ -394,13 +398,13 @@ def reserve_bixi_bike(user_email: str, user_name: str, station_id: str) -> dict[
     _bixi_rentals[rental_id] = rental_record
     return BixiRentalContext(rental_record).serialize()
 
-
+# This function allows the user to pay for their reserved rental, transitioning it to active state.
 def pay_for_bixi_rental(rental_id: str, user_email: str) -> dict[str, Any]:
     rental_context = _get_rental_context(rental_id, user_email)
     rental_context.pay()
     return rental_context.serialize()
 
-
+# This function allows the user to return their active rental to a station, transitioning it to returned state.
 def return_bixi_rental(rental_id: str, user_email: str, return_station_id: str) -> dict[str, Any]:
     rental_context = _get_rental_context(rental_id, user_email)
 
@@ -431,7 +435,7 @@ def get_user_bixi_rental_state(user_email: str, history_limit: int = 5) -> dict[
         'history': [_serialize_rental(rental) for rental in rental_history[: max(1, history_limit)]],
     }
 
-
+# This function compiles analytics data about the rentals, such as total rentals, active rentals, revenue, average duration, and most popular station.
 def get_bixi_analytics_summary() -> dict[str, Any]:
     rental_contexts = [BixiRentalContext(rental) for rental in _bixi_rentals.values()]
     total_rentals = len(rental_contexts)
