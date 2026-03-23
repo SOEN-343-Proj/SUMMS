@@ -2,75 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import '../styles/PublicTransitHub.css'
 import LeafletMap from './LeafletMap'
+import { addressLookupAdapter, transitDirectionsAdapter } from '../services/transitAdapters'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 const DEFAULT_CENTER = [45.5017, -73.5673]
-const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search'
-const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse'
-const MONTREAL_VIEWBOX = '-73.95,45.39,-73.4,45.72'
-
-async function searchAddress(query) {
-  const response = await fetch(
-    `${NOMINATIM_SEARCH_URL}?format=jsonv2&limit=1&q=${encodeURIComponent(query)}&viewbox=${MONTREAL_VIEWBOX}&bounded=0&countrycodes=ca`,
-    {
-      headers: {
-        Accept: 'application/json',
-      },
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error('Unable to find that address right now.')
-  }
-
-  const results = await response.json()
-  if (!Array.isArray(results) || results.length === 0) {
-    throw new Error('Address not found. Try a more specific location.')
-  }
-
-  const match = results[0]
-  return {
-    lat: Number(match.lat),
-    lng: Number(match.lon),
-    label: match.display_name || query,
-  }
-}
-
-async function fetchAddressSuggestions(query) {
-  const response = await fetch(
-    `${NOMINATIM_SEARCH_URL}?format=jsonv2&limit=8&q=${encodeURIComponent(query)}&viewbox=${MONTREAL_VIEWBOX}&bounded=0&countrycodes=ca`,
-    {
-      headers: {
-        Accept: 'application/json',
-      },
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error('Unable to load address suggestions right now.')
-  }
-
-  const results = await response.json()
-  return Array.isArray(results) ? results : []
-}
-
-async function reverseLookup(lat, lng) {
-  const response = await fetch(
-    `${NOMINATIM_REVERSE_URL}?format=jsonv2&lat=${lat}&lon=${lng}`,
-    {
-      headers: {
-        Accept: 'application/json',
-      },
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error('Unable to look up this point on the map.')
-  }
-
-  const payload = await response.json()
-  return payload.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-}
 
 function PublicTransitHub({ onClose }) {
   const mapInstanceRef = useRef(null)
@@ -122,13 +56,13 @@ function PublicTransitHub({ onClose }) {
     }
 
     if (originDebounceRef.current) {
-      clearTimeout(originDebounceRef.current)
+        clearTimeout(originDebounceRef.current)
     }
 
     originDebounceRef.current = setTimeout(async () => {
       try {
         setLoadingOriginSuggestions(true)
-        const matches = await fetchAddressSuggestions(originText.trim())
+        const matches = await addressLookupAdapter.fetchAddressSuggestions(originText.trim())
         setOriginSuggestions(matches)
         setShowOriginSuggestions(matches.length > 0)
       } catch {
@@ -159,7 +93,7 @@ function PublicTransitHub({ onClose }) {
     destinationDebounceRef.current = setTimeout(async () => {
       try {
         setLoadingDestinationSuggestions(true)
-        const matches = await fetchAddressSuggestions(destinationText.trim())
+        const matches = await addressLookupAdapter.fetchAddressSuggestions(destinationText.trim())
         setDestinationSuggestions(matches)
         setShowDestinationSuggestions(matches.length > 0)
       } catch {
@@ -343,7 +277,7 @@ function PublicTransitHub({ onClose }) {
     centerMapOnPoint(point)
 
     try {
-      const label = await reverseLookup(point.lat, point.lng)
+      const label = await addressLookupAdapter.reverseLookup(point.lat, point.lng)
       setOriginText(label)
     } catch {
       setOriginText('Current location')
@@ -382,7 +316,7 @@ function PublicTransitHub({ onClose }) {
 
     try {
       if (!resolvedOriginPoint && resolvedOriginLabel) {
-        const match = await searchAddress(resolvedOriginLabel)
+        const match = await addressLookupAdapter.searchAddress(resolvedOriginLabel)
         resolvedOriginPoint = { lat: match.lat, lng: match.lng }
         resolvedOriginLabel = match.label
         setOriginPoint(resolvedOriginPoint)
@@ -391,7 +325,7 @@ function PublicTransitHub({ onClose }) {
       }
 
       if (!resolvedDestinationPoint && resolvedDestinationLabel) {
-        const match = await searchAddress(resolvedDestinationLabel)
+        const match = await addressLookupAdapter.searchAddress(resolvedDestinationLabel)
         resolvedDestinationPoint = { lat: match.lat, lng: match.lng }
         resolvedDestinationLabel = match.label
         setDestinationPoint(resolvedDestinationPoint)
@@ -406,17 +340,7 @@ function PublicTransitHub({ onClose }) {
         ? `${resolvedDestinationPoint.lat},${resolvedDestinationPoint.lng}`
         : resolvedDestinationLabel
 
-      const response = await fetch(
-        `${API_BASE_URL}/transit/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`
-      )
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => null)
-        throw new Error(errorPayload?.detail || 'Transit directions could not be loaded.')
-      }
-
-      const payload = await response.json()
-      const routes = Array.isArray(payload.routes) ? payload.routes : []
+      const routes = await transitDirectionsAdapter.fetchRoutes(origin, destination)
 
       if (!routes.length) {
         throw new Error('No transit route was found for that trip. Try another origin or destination.')
