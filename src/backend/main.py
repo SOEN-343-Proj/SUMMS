@@ -20,6 +20,7 @@ GEOCODE_CACHE: dict[str, tuple[float, tuple[float, float]]] = {}
 
 try:
     from .bixi_router import router as bixi_router
+    from .car_router import router as car_router
     from .credentials import (
         authenticate_admin,
         authenticate_user,
@@ -30,6 +31,7 @@ try:
     )
 except ImportError:
     from bixi_router import router as bixi_router  # pragma: no cover
+    from car_router import router as car_router  # pragma: no cover
     from credentials import (  # pragma: no cover
         authenticate_admin,
         authenticate_user,
@@ -86,6 +88,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(bixi_router)
+app.include_router(car_router)
 
 def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Calculate distance between two coordinates using Haversine formula (in km)"""

@@ -1,0 +1,212 @@
+.car-rental-container {
+  background: rgba(34, 39, 48, 0.97);
+}
+
+.car-rental-header {
+  gap: 14px;
+}
+
+.car-rental-header p {
+  margin: 6px 0 0;
+  color: #c9d2de;
+  font-size: 0.94rem;
+}
+
+.car-rental-content {
+  padding: 20px;
+  overflow-y: auto;
+  display: grid;
+  gap: 18px;
+}
+
+.car-section {
+  background: rgba(24, 29, 38, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.car-section h3 {
+  margin: 0 0 14px;
+  color: #e1ff73;
+  font-size: 1.08rem;
+}
+
+.car-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.car-card {
+  background: rgba(35, 42, 55, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.car-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.car-card-header h4 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 1rem;
+}
+
+.car-rate {
+  color: #93c5fd;
+  font-size: 0.87rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.car-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  color: #d3dbe6;
+  font-size: 0.85rem;
+}
+
+.car-action-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.car-action-btn.rent {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+}
+
+.car-action-btn.return {
+  background: linear-gradient(135deg, #059669 0%, #0f766e 100%);
+}
+
+.car-action-btn.cancel {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.car-action-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.car-empty {
+  margin: 0;
+  color: #c5cfdd;
+}
+
+.payment-method-panel {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.payment-method-panel label {
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #b9c4d5;
+  font-weight: 700;
+}
+
+.payment-method-panel select {
+  background: rgba(18, 22, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 600;
+}
+
+.payment-method-panel small {
+  color: #aeb9ca;
+  font-size: 0.82rem;
+}
+
+.payment-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 10, 16, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 20px;
+}
+
+.payment-modal {
+  width: min(540px, 100%);
+  background: linear-gradient(160deg, rgba(25, 31, 43, 0.98) 0%, rgba(17, 22, 33, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+}
+
+.payment-modal h3 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 1.3rem;
+}
+
+.payment-modal p {
+  margin: 10px 0 16px;
+  color: #c6d0df;
+}
+
+.payment-mock-details {
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(9, 13, 21, 0.8);
+  padding: 10px;
+}
+
+.payment-mock-details h4 {
+  margin: 0 0 8px;
+  color: #dbeafe;
+  font-size: 0.92rem;
+  letter-spacing: 0.03em;
+}
+
+.payment-mock-details ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #bfdbfe;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.payment-mock-details li {
+  margin-bottom: 4px;
+}
+
+.payment-modal-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .car-rental-content {
+    padding: 14px;
+  }
+
+  .car-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}

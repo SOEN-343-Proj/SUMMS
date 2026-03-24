@@ -3,11 +3,13 @@ import '../styles/UserDashboard.css'
 import ParkingMap from './ParkingMap'
 import UberBixiMap from './UberBixiMap'
 import BixiRentalFlow from './BixiRentalFlow'
+import CarRentalFlow from './CarRentalFlow'
 
 function UserDashboard({ user, onLogout }) {
   const [showParkingMap, setShowParkingMap] = useState(false)
   const [showUberBixiMap, setShowUberBixiMap] = useState(false)
   const [showBixiRental, setShowBixiRental] = useState(false)
+  const [showCarRental, setShowCarRental] = useState(false)
 
   return (
     <div className="user-dashboard">
@@ -17,6 +19,12 @@ function UserDashboard({ user, onLogout }) {
         <BixiRentalFlow
           user={user}
           onClose={() => setShowBixiRental(false)}
+        />
+      )}
+      {showCarRental && (
+        <CarRentalFlow
+          user={user}
+          onClose={() => setShowCarRental(false)}
         />
       )}
 
@@ -57,7 +65,14 @@ function UserDashboard({ user, onLogout }) {
         <div className="dashboard-section">
           <h2> Rental Service </h2>
           <p className="section-info">Find and manage rental services</p>
-          <button className="action-btn" onClick={() => setShowBixiRental(true)}>Search</button>
+          <div className="rental-actions">
+            <button className="action-btn" onClick={() => setShowBixiRental(true)}>
+              Bixi Rental
+            </button>
+            <button className="action-btn" onClick={() => setShowCarRental(true)}>
+              Car Rental
+            </button>
+          </div>
         </div>
       </div>
 

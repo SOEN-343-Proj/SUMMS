@@ -87,6 +87,12 @@
     width: 100%;
 }
 
+.rental-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
 .quick-access {
     background: rgba(50, 55, 65, 0.8);
     padding: 25px;
@@ -134,6 +140,10 @@
     }
 
     .dashboard-content {
+        grid-template-columns: 1fr;
+    }
+
+    .rental-actions {
         grid-template-columns: 1fr;
     }
 
