@@ -7,12 +7,18 @@ from typing import Any
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
+try:
+    from .payment_system import PaymentProcessor
+except ImportError:
+    from payment_system import PaymentProcessor  # pragma: no cover
+
 
 GBFS_STATION_INFO_URL = 'https://gbfs.velobixi.com/gbfs/2-2/en/station_information.json'
 GBFS_STATION_STATUS_URL = 'https://gbfs.velobixi.com/gbfs/2-2/en/station_status.json'
 GBFS_CACHE_TTL_SECONDS = 60
 
 PAYMENT_AUTHORIZATION_AMOUNT = 4.25
+PAYMENT_CURRENCY = 'CAD'
 RENTAL_BASE_FEE = 2.75
 RENTAL_PER_MINUTE_RATE = 0.18
 
@@ -21,6 +27,7 @@ _station_cache: dict[str, Any] = {
     'stations': [],
 }
 _bixi_rentals: dict[str, dict[str, Any]] = {}
+_payment_processor = PaymentProcessor()
 
 
 def _fetch_json(url: str) -> dict[str, Any]:
@@ -67,7 +74,7 @@ def _calculate_final_cost(duration_minutes: int) -> float:
 class RentalState:
     status = 'unknown'
 
-    def pay(self, context: BixiRentalContext) -> None:
+    def pay(self, context: BixiRentalContext, payment_result: dict[str, Any]) -> None:
         raise ValueError('Only reserved rentals can be paid and activated.')
 
     def return_bike(self, context: BixiRentalContext, return_station: dict[str, Any]) -> None:
@@ -95,10 +102,14 @@ class RentalState:
 class ReservedRentalState(RentalState):
     status = 'reserved'
 
-    def pay(self, context: BixiRentalContext) -> None:
+    def pay(self, context: BixiRentalContext, payment_result: dict[str, Any]) -> None:
         context.record['started_at'] = time.time()
-        context.record['authorization_amount'] = PAYMENT_AUTHORIZATION_AMOUNT
-        context.record['payment_status'] = 'authorized'
+        context.record['authorization_amount'] = payment_result['authorized_amount']
+        context.record['payment_status'] = payment_result['status']
+        context.record['payment_method'] = payment_result['method']
+        context.record['payment_provider'] = payment_result['provider']
+        context.record['payment_transaction_id'] = payment_result['transaction_id']
+        context.record['payment_receipt'] = payment_result.get('receipt', {})
         context.transition_to(ACTIVE_RENTAL_STATE)
 
     def is_open(self) -> bool:
@@ -163,8 +174,8 @@ class BixiRentalContext:
         self.state = state
         self.record['status'] = state.status
 
-    def pay(self) -> None:
-        self.state.pay(self)
+    def pay(self, payment_result: dict[str, Any]) -> None:
+        self.state.pay(self, payment_result)
 
     def return_bike(self, return_station: dict[str, Any]) -> None:
         self.state.return_bike(self, return_station)
@@ -303,6 +314,10 @@ def _serialize_rental(rental: dict[str, Any]) -> dict[str, Any]:
             'authorization_amount': rental.get('authorization_amount'),
             'final_cost': rental.get('final_cost'),
             'status': rental.get('payment_status', 'pending'),
+            'method': rental.get('payment_method'),
+            'provider': rental.get('payment_provider'),
+            'transaction_id': rental.get('payment_transaction_id'),
+            'receipt': rental.get('payment_receipt') or {},
         },
     }
 
@@ -394,15 +409,39 @@ def reserve_bixi_bike(user_email: str, user_name: str, station_id: str) -> dict[
         'authorization_amount': None,
         'final_cost': None,
         'payment_status': 'pending',
+        'payment_method': None,
+        'payment_provider': None,
+        'payment_transaction_id': None,
+        'payment_receipt': {},
     }
     _bixi_rentals[rental_id] = rental_record
     return BixiRentalContext(rental_record).serialize()
 
 # This function allows the user to pay for their reserved rental, transitioning it to active state.
-def pay_for_bixi_rental(rental_id: str, user_email: str) -> dict[str, Any]:
+def pay_for_bixi_rental(
+    rental_id: str,
+    user_email: str,
+    payment_method: str = 'card',
+    payment_details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     rental_context = _get_rental_context(rental_id, user_email)
-    rental_context.pay()
+
+    payment_result = _payment_processor.authorize(
+        amount=PAYMENT_AUTHORIZATION_AMOUNT,
+        currency=PAYMENT_CURRENCY,
+        payer_email=user_email,
+        payment_method=payment_method,
+        payment_details=payment_details,
+    )
+    if payment_result.get('status') != 'authorized':
+        raise ValueError(payment_result.get('reason') or 'Payment authorization failed.')
+
+    rental_context.pay(payment_result)
     return rental_context.serialize()
+
+
+def get_mock_payment_methods() -> list[dict[str, str]]:
+    return _payment_processor.list_supported_methods()
 
 # This function allows the user to return their active rental to a station, transitioning it to returned state.
 def return_bixi_rental(rental_id: str, user_email: str, return_station_id: str) -> dict[str, Any]:

@@ -10,6 +10,11 @@ const HISTORY_LIMIT = '5'
 const STATION_SEARCH_LIMIT = '12'
 const STATION_SEARCH_RADIUS = '3'
 const PAYMENT_AUTHORIZATION_AMOUNT = 4.25
+const DEFAULT_PAYMENT_METHODS = [
+  { id: 'card', name: 'Card', description: 'Sample credit card authorization' },
+  { id: 'wallet', name: 'Wallet', description: 'Sample wallet authorization' },
+  { id: 'transit_pass', name: 'Transit Pass', description: 'Sample transit pass charge' },
+]
 
 async function requestJson(url, options) {
   const response = await fetch(url, options)
@@ -62,6 +67,50 @@ function buildStationSearchQuery(location) {
   })
 }
 
+function buildMockPaymentDetails(method, user) {
+  switch (method) {
+    case 'wallet':
+      return {
+        wallet_id: `WALLET-${user.email.split('@')[0].toUpperCase()}`,
+      }
+    case 'transit_pass':
+      return {
+        pass_id: 'PASS-MTL-001',
+        holder_name: user.name,
+      }
+    case 'card':
+    default:
+      return {
+        card_brand: 'Visa',
+        card_last4: '4242',
+      }
+  }
+}
+
+function buildSamplePaymentInfo(method, user) {
+  if (method === 'wallet') {
+    return [
+      `Wallet ID: WALLET-${user.email.split('@')[0].toUpperCase()}`,
+      'Provider: WalletService',
+      'Status: Ready to authorize',
+    ]
+  }
+
+  if (method === 'transit_pass') {
+    return [
+      'Transit Pass ID: PASS-MTL-001',
+      `Holder: ${user.name}`,
+      'Network: TransitPassNetwork',
+    ]
+  }
+
+  return [
+    'Card: Visa ending in 4242',
+    `Cardholder: ${user.name}`,
+    'Provider: CardGateway',
+  ]
+}
+
 function SummaryGrid({ cards, compact = false }) {
   return (
     <section className={`summary-grid ${compact ? 'compact' : ''}`}>
@@ -95,6 +144,9 @@ function BixiRentalFlow({ user, onClose }) {
   const [openRental, setOpenRental] = useState(null)
   const [history, setHistory] = useState([])
   const [analytics, setAnalytics] = useState(null)
+  const [paymentMethods, setPaymentMethods] = useState(DEFAULT_PAYMENT_METHODS)
+  const [paymentMethod, setPaymentMethod] = useState(DEFAULT_PAYMENT_METHODS[0].id)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [selectedStationId, setSelectedStationId] = useState('')
   const [loadingState, setLoadingState] = useState(true)
   const [loadingStations, setLoadingStations] = useState(false)
@@ -119,6 +171,11 @@ function BixiRentalFlow({ user, onClose }) {
     { label: 'Completed', value: analytics?.completed_rentals ?? 0 },
     { label: 'Average Duration', value: `${analytics?.average_duration_minutes ?? 0} min` },
   ]
+
+  const selectedPaymentOption =
+    paymentMethods.find((method) => method.id === paymentMethod) || DEFAULT_PAYMENT_METHODS[0]
+  const mockPaymentDetails = buildMockPaymentDetails(paymentMethod, user)
+  const samplePaymentInfo = buildSamplePaymentInfo(paymentMethod, user)
 
   const applyStations = (nextStations) => {
     setStations(nextStations)
@@ -175,6 +232,23 @@ function BixiRentalFlow({ user, onClose }) {
     return savedLocation
   }
 
+  const loadPaymentMethods = async () => {
+    try {
+      const data = await requestJson(`${API_BASE_URL}/bixi/payments/methods`)
+      const methods = Array.isArray(data.methods) && data.methods.length > 0 ? data.methods : DEFAULT_PAYMENT_METHODS
+      setPaymentMethods(methods)
+      setPaymentMethod((current) => {
+        if (methods.some((method) => method.id === current)) {
+          return current
+        }
+
+        return methods[0]?.id || DEFAULT_PAYMENT_METHODS[0].id
+      })
+    } catch {
+      setPaymentMethods(DEFAULT_PAYMENT_METHODS)
+    }
+  }
+
   const refreshAfterAction = async () => {
     const savedLocation = await loadDashboardData()
     const locationToUse = searchLocation || savedLocation
@@ -190,7 +264,7 @@ function BixiRentalFlow({ user, onClose }) {
       setError('')
 
       try {
-        await loadDashboardData()
+        await Promise.all([loadDashboardData(), loadPaymentMethods()])
       } catch (err) {
         setError(err.message)
       } finally {
@@ -204,6 +278,12 @@ function BixiRentalFlow({ user, onClose }) {
   useEffect(() => {
     loadStations(searchLocation)
   }, [searchLocation])
+
+  useEffect(() => {
+    if (!isReserved) {
+      setShowPaymentModal(false)
+    }
+  }, [isReserved])
 
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -315,10 +395,13 @@ function BixiRentalFlow({ user, onClose }) {
         },
         body: JSON.stringify({
           user_email: user.email,
+          payment_method: paymentMethod,
+          payment_details: mockPaymentDetails,
         }),
       })
 
-      setNotice('Payment authorized. Your BIXI rental is now active.')
+      setNotice(`Payment authorized with ${selectedPaymentOption.name}. Your BIXI rental is now active.`)
+      setShowPaymentModal(false)
       await refreshAfterAction()
     } catch (err) {
       setError(err.message)
@@ -472,12 +555,10 @@ function BixiRentalFlow({ user, onClose }) {
                       <button
                         className="flow-btn primary"
                         type="button"
-                        onClick={handlePay}
+                        onClick={() => setShowPaymentModal(true)}
                         disabled={actionLoading === 'pay'}
                       >
-                        {actionLoading === 'pay'
-                          ? 'Authorizing payment...'
-                          : `Authorize ${formatCurrency(PAYMENT_AUTHORIZATION_AMOUNT)} and unlock bike`}
+                        {`Pay ${formatCurrency(PAYMENT_AUTHORIZATION_AMOUNT)} and unlock bike`}
                       </button>
                     </div>
                   )}
@@ -616,6 +697,57 @@ function BixiRentalFlow({ user, onClose }) {
           )}
         </aside>
       </div>
+
+      {showPaymentModal && isReserved && (
+        <div className="payment-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
+          <div className="payment-modal">
+            <h3 id="payment-modal-title">Authorize Payment</h3>
+            <p>
+              Choose a payment strategy and authorize {formatCurrency(PAYMENT_AUTHORIZATION_AMOUNT)} to start this BIXI ride.
+            </p>
+
+            <div className="payment-method-panel">
+              <label htmlFor="payment-method-select">Payment Method</label>
+              <select
+                id="payment-method-select"
+                value={paymentMethod}
+                onChange={(event) => setPaymentMethod(event.target.value)}
+                disabled={actionLoading === 'pay'}
+              >
+                {paymentMethods.map((method) => (
+                  <option key={method.id} value={method.id}>
+                    {method.name}
+                  </option>
+                ))}
+              </select>
+              <small>{selectedPaymentOption.description}</small>
+            </div>
+
+            <div className="payment-mock-details">
+              <h4>Sample Payment Information</h4>
+              <ul>
+                {samplePaymentInfo.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="payment-modal-actions">
+              <button
+                className="station-action-btn secondary"
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                disabled={actionLoading === 'pay'}
+              >
+                Cancel
+              </button>
+              <button className="flow-btn primary" type="button" onClick={handlePay} disabled={actionLoading === 'pay'}>
+                {actionLoading === 'pay' ? 'Authorizing payment...' : 'Authorize and Start Ride'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

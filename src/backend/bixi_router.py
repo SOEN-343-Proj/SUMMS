@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
+from typing import Any
 
 try:
     from .bixi_rental import (
+        get_mock_payment_methods,
         get_bixi_analytics_summary,
         get_nearby_bixi_stations,
         get_user_bixi_rental_state,
@@ -12,6 +14,7 @@ try:
     )
 except ImportError:
     from bixi_rental import (  # pragma: no cover
+        get_mock_payment_methods,
         get_bixi_analytics_summary,
         get_nearby_bixi_stations,
         get_user_bixi_rental_state,
@@ -29,6 +32,8 @@ class BixiReservationRequest(BaseModel):
 
 class BixiUserRequest(BaseModel):
     user_email: EmailStr
+    payment_method: str = 'card'
+    payment_details: dict[str, Any] | None = None
 
 
 class BixiReturnRequest(BaseModel):
@@ -83,12 +88,22 @@ def create_bixi_reservation(payload: BixiReservationRequest):
 @router.post("/bixi/rentals/{rental_id}/pay")
 def pay_bixi_reservation(rental_id: str, payload: BixiUserRequest):
     try:
-        rental = pay_for_bixi_rental(rental_id=rental_id, user_email=str(payload.user_email))
+        rental = pay_for_bixi_rental(
+            rental_id=rental_id,
+            user_email=str(payload.user_email),
+            payment_method=payload.payment_method,
+            payment_details=payload.payment_details,
+        )
         return {"success": True, "rental": rental}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unable to activate BIXI rental: {str(e)}")
+
+
+@router.get('/bixi/payments/methods')
+def list_mock_methods():
+    return {'methods': get_mock_payment_methods()}
 
 
 @router.post("/bixi/rentals/{rental_id}/return")

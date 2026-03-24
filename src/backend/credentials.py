@@ -37,8 +37,8 @@ user_credentials = [
         "role": "user"
     },
     {
-        "email": "alex.wilson@student.com",
-        "password": "student789",
+        "email": "123@123.",
+        "password": "123@123.",
         "name": "Alex Wilson",
         "role": "user"
     }
