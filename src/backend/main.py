@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
@@ -20,7 +22,7 @@ GEOCODE_CACHE: dict[str, tuple[float, tuple[float, float]]] = {}
 
 try:
     from .bixi_router import router as bixi_router
-    from .car_router import router as car_router
+    from .vehicle_router import router as vehicle_router
     from .credentials import (
         authenticate_admin,
         authenticate_user,
@@ -31,7 +33,7 @@ try:
     )
 except ImportError:
     from bixi_router import router as bixi_router  # pragma: no cover
-    from car_router import router as car_router  # pragma: no cover
+    from vehicle_router import router as vehicle_router  # pragma: no cover
     from credentials import (  # pragma: no cover
         authenticate_admin,
         authenticate_user,
@@ -83,12 +85,13 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.include_router(bixi_router)
-app.include_router(car_router)
+app.include_router(vehicle_router)
 
 def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Calculate distance between two coordinates using Haversine formula (in km)"""

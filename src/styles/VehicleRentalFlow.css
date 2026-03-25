@@ -1,44 +1,44 @@
-.car-rental-container {
+.vehicle-rental-container {
   background: rgba(34, 39, 48, 0.97);
 }
 
-.car-rental-header {
+.vehicle-rental-header {
   gap: 14px;
 }
 
-.car-rental-header p {
+.vehicle-rental-header p {
   margin: 6px 0 0;
   color: #c9d2de;
   font-size: 0.94rem;
 }
 
-.car-rental-content {
+.vehicle-rental-content {
   padding: 20px;
   overflow-y: auto;
   display: grid;
   gap: 18px;
 }
 
-.car-section {
+.vehicle-section {
   background: rgba(24, 29, 38, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   padding: 16px;
 }
 
-.car-section h3 {
+.vehicle-section h3 {
   margin: 0 0 14px;
   color: #e1ff73;
   font-size: 1.08rem;
 }
 
-.car-list-grid {
+.vehicle-list-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
-.car-card {
+.vehicle-card {
   background: rgba(35, 42, 55, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
@@ -47,27 +47,27 @@
   gap: 10px;
 }
 
-.car-card-header {
+.vehicle-card-header {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   align-items: flex-start;
 }
 
-.car-card-header h4 {
+.vehicle-card-header h4 {
   margin: 0;
   color: #f8fafc;
   font-size: 1rem;
 }
 
-.car-rate {
+.vehicle-rate {
   color: #93c5fd;
   font-size: 0.87rem;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.car-meta-grid {
+.vehicle-meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
@@ -75,7 +75,7 @@
   font-size: 0.85rem;
 }
 
-.car-action-btn {
+.vehicle-action-btn {
   border: none;
   border-radius: 8px;
   padding: 10px 12px;
@@ -84,27 +84,101 @@
   cursor: pointer;
 }
 
-.car-action-btn.rent {
+.vehicle-action-btn.rent {
   background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
 }
 
-.car-action-btn.return {
+.vehicle-action-btn.edit {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+.vehicle-action-btn.return {
   background: linear-gradient(135deg, #059669 0%, #0f766e 100%);
 }
 
-.car-action-btn.cancel {
+.vehicle-action-btn.cancel {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
-.car-action-btn:disabled {
+.vehicle-action-btn:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.car-empty {
+.vehicle-empty {
   margin: 0;
   color: #c5cfdd;
+}
+
+.marketplace-add-section {
+  display: grid;
+  gap: 10px;
+}
+
+.marketplace-add-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.marketplace-add-form input {
+  background: rgba(18, 22, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-weight: 500;
+}
+
+.marketplace-add-form button {
+  align-self: stretch;
+}
+
+.vehicle-edit-modal {
+  width: min(700px, 100%);
+}
+
+.marketplace-edit-form {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.marketplace-edit-form input {
+  background: rgba(18, 22, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-weight: 500;
+}
+
+.marketplace-edit-form .payment-modal-actions {
+  grid-column: 1 / -1;
+}
+
+.vehicle-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vehicle-filter-row label {
+  color: #c5cfdd;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.vehicle-filter-row select {
+  background: rgba(18, 22, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-weight: 600;
 }
 
 .payment-method-panel {
@@ -202,11 +276,11 @@
 }
 
 @media (max-width: 640px) {
-  .car-rental-content {
+  .vehicle-rental-content {
     padding: 14px;
   }
 
-  .car-meta-grid {
+  .vehicle-meta-grid {
     grid-template-columns: 1fr;
   }
 }
