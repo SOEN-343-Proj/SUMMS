@@ -5,9 +5,6 @@ import math
 import os
 import time
 from typing import Any
-from urllib.parse import quote_plus
-from urllib.request import urlopen
-import json
 
 mapsApiKey = "AIzaSyAOVjtt-TvPi31gZcmeedmc4-cMrq9jO5A"
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", mapsApiKey)
@@ -29,6 +26,13 @@ try:
         register_user,
         verify_admin_code,
     )
+    from .transit_adapters import (
+        GoogleApiAdapter,
+        GoogleDirectionsApiTransitAdapter,
+        GoogleGeocodingAdapter,
+        GoogleRoutesApiTransitAdapter,
+        TransitDirectionsServiceAdapter,
+    )
 except ImportError:
     from bixi_router import router as bixi_router  # pragma: no cover
     from car_router import router as car_router  # pragma: no cover
@@ -39,6 +43,13 @@ except ImportError:
         get_all_users,
         register_user,
         verify_admin_code,
+    )
+    from transit_adapters import (  # pragma: no cover
+        GoogleApiAdapter,
+        GoogleDirectionsApiTransitAdapter,
+        GoogleGeocodingAdapter,
+        GoogleRoutesApiTransitAdapter,
+        TransitDirectionsServiceAdapter,
     )
 
 
@@ -103,11 +114,6 @@ def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
     return R * c
 
 
-def fetch_google_json(url: str) -> dict[str, Any]:
-    with urlopen(url) as response:
-        return json.loads(response.read().decode("utf-8"))
-
-
 def get_cache_value(cache: dict[str, tuple[float, Any]], key: str, ttl_seconds: int) -> Any | None:
     item = cache.get(key)
     if not item:
@@ -129,26 +135,20 @@ def set_cache_value(cache: dict[str, tuple[float, Any]], key: str, value: Any) -
     cache[key] = (time.time(), value)
 
 
-def geocode_google_address(address: str) -> tuple[float, float]:
-    normalized_address = " ".join(address.strip().lower().split())
-    cache_key = f"geocode:{normalized_address}"
-    cached_coords = get_cache_value(GEOCODE_CACHE, cache_key, CACHE_TTL_GEOCODE_SECONDS)
-    if cached_coords:
-        return cached_coords
-
-    geocode_url = (
-        "https://maps.googleapis.com/maps/api/geocode/json"
-        f"?address={quote_plus(address)}&key={GOOGLE_MAPS_API_KEY}"
-    )
-    payload = fetch_google_json(geocode_url)
-
-    if payload.get("status") != "OK" or not payload.get("results"):
-        raise HTTPException(status_code=404, detail="Address not found")
-
-    location = payload["results"][0]["geometry"]["location"]
-    coords = (float(location["lat"]), float(location["lng"]))
-    set_cache_value(GEOCODE_CACHE, cache_key, coords)
-    return coords
+google_api_adapter = GoogleApiAdapter(GOOGLE_MAPS_API_KEY)
+google_geocoding_adapter = GoogleGeocodingAdapter(
+    google_api_adapter,
+    GOOGLE_MAPS_API_KEY,
+    GEOCODE_CACHE,
+    CACHE_TTL_GEOCODE_SECONDS,
+    CACHE_MAX_ENTRIES,
+)
+transit_directions_adapter = TransitDirectionsServiceAdapter(
+    [
+        ("Routes API adapter", GoogleRoutesApiTransitAdapter(google_api_adapter, GOOGLE_MAPS_API_KEY)),
+        ("Directions API adapter", GoogleDirectionsApiTransitAdapter(google_api_adapter, GOOGLE_MAPS_API_KEY)),
+    ]
+)
 
 
 def get_nearby_parking_spots(lat: float, lng: float, radius_km: float = 1) -> list[dict[str, Any]]:
@@ -166,7 +166,7 @@ def get_nearby_parking_spots(lat: float, lng: float, radius_km: float = 1) -> li
         "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
         f"?location={rounded_lat},{rounded_lng}&radius={radius_meters}&type=parking&key={GOOGLE_MAPS_API_KEY}"
     )
-    payload = fetch_google_json(nearby_url)
+    payload = google_api_adapter.fetch_json(nearby_url)
 
     if payload.get("status") not in {"OK", "ZERO_RESULTS"}:
         raise HTTPException(status_code=400, detail=f"Google Places error: {payload.get('status', 'UNKNOWN_ERROR')}")
@@ -205,6 +205,28 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/config/google-maps-key")
+def get_google_maps_key():
+    if not GOOGLE_MAPS_API_KEY:
+        raise HTTPException(status_code=500, detail="Google Maps API key is not configured")
+    return {"apiKey": GOOGLE_MAPS_API_KEY}
+
+
+@app.get("/maps/reverse-geocode")
+def reverse_geocode(lat: float, lng: float):
+    if not GOOGLE_MAPS_API_KEY:
+        raise HTTPException(status_code=500, detail="Google Maps API key is not configured")
+    return {"address": google_geocoding_adapter.reverse_geocode(lat, lng)}
+
+
+@app.get("/transit/directions")
+def get_transit_directions(origin: str, destination: str):
+    if not GOOGLE_MAPS_API_KEY:
+        raise HTTPException(status_code=500, detail="Google Maps API key is not configured")
+    routes = transit_directions_adapter.fetch_routes(origin, destination)
+    return {"routes": routes}
 
 
 @app.post("/auth/admin/code")
@@ -259,7 +281,7 @@ def get_nearest_parking(
             raise HTTPException(status_code=500, detail="Google Maps API key is not configured")
 
         if address:
-            lat, lng = geocode_google_address(address)
+            lat, lng = google_geocoding_adapter.geocode_address(address)
 
         if lat is None or lng is None:
             raise HTTPException(status_code=400, detail="Provide either address or both lat/lng coordinates")
