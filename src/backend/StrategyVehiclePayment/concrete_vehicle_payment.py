@@ -55,3 +55,4 @@ class ConcreteVehiclePayment:
 
     def list_supported_methods(self) -> list[dict[str, str]]:
         return self.list_methods()
+
