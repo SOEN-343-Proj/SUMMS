@@ -2,6 +2,13 @@ import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
+const DEFAULT_TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+const DEFAULT_TILE_OPTIONS = {
+  subdomains: 'abcd',
+  maxZoom: 20,
+  attribution: '© OpenStreetMap contributors © CARTO',
+}
+
 // Fix default marker icons (global once)
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -14,16 +21,17 @@ function LeafletMap({
   className,
   initialCenter = [45.55, -73.6],
   initialZoom = 12,
-  tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  tileOptions = {
-    subdomains: 'abcd',
-    maxZoom: 20,
-    attribution: '© OpenStreetMap contributors © CARTO',
-  },
+  tileUrl = DEFAULT_TILE_URL,
+  tileOptions = DEFAULT_TILE_OPTIONS,
   onMapReady,
 }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
+  const onMapReadyRef = useRef(onMapReady)
+
+  useEffect(() => {
+    onMapReadyRef.current = onMapReady
+  }, [onMapReady])
 
   useEffect(() => {
     if (!mapRef.current) return
@@ -35,15 +43,15 @@ function LeafletMap({
 
     mapInstanceRef.current = map
 
-    if (onMapReady) {
-      onMapReady(map)
+    if (onMapReadyRef.current) {
+      onMapReadyRef.current(map)
     }
 
     return () => {
       map.remove()
       mapInstanceRef.current = null
     }
-  }, [initialCenter, initialZoom, tileUrl, tileOptions, onMapReady])
+  }, [initialCenter, initialZoom, tileUrl, tileOptions])
 
   return <div ref={mapRef} className={className}></div>
 }
