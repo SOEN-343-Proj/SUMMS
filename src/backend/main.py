@@ -18,8 +18,8 @@ NEARBY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 GEOCODE_CACHE: dict[str, tuple[float, tuple[float, float]]] = {}
 
 try:
-    from .bixi_router import router as bixi_router
-    from .vehicle_router import router as vehicle_router
+    from .Sprint1Implementation.bixi_router import router as bixi_router
+    from .Sprint1Implementation.vehicle_router import router as vehicle_router
     from .credentials import (
         authenticate_admin,
         authenticate_user,
@@ -36,8 +36,8 @@ try:
         TransitDirectionsServiceAdapter,
     )
 except ImportError:
-    from bixi_router import router as bixi_router  # pragma: no cover
-    from vehicle_router import router as vehicle_router  # pragma: no cover
+    from .Sprint1Implementation.bixi_router import router as bixi_router  # pragma: no cover
+    from .Sprint1Implementation.vehicle_router import router as vehicle_router  # pragma: no cover
     from credentials import (  # pragma: no cover
         authenticate_admin,
         authenticate_user,
