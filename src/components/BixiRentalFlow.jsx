@@ -4,6 +4,7 @@ import '../styles/ParkingMap.css'
 import '../styles/BixiRentalFlow.css'
 import LeafletMap from './LeafletMap'
 import LocationSearchModal from './LocationSearchModal'
+import { trackEvent } from '../services/analytics'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 const HISTORY_LIMIT = '5'
@@ -370,6 +371,7 @@ function BixiRentalFlow({ user, onClose }) {
       })
 
       setNotice(`Bike reserved at ${station.name}. Complete payment to unlock it.`)
+      trackEvent('bixi_reserved', { station_name: station.name, email: user.email })
       await refreshAfterAction()
     } catch (err) {
       setError(err.message)
@@ -401,6 +403,7 @@ function BixiRentalFlow({ user, onClose }) {
       })
 
       setNotice(`Payment authorized with ${selectedPaymentOption.name}. Your BIXI rental is now active.`)
+      trackEvent('bixi_payment', { payment_method: paymentMethod, email: user.email })
       setShowPaymentModal(false)
       await refreshAfterAction()
     } catch (err) {
@@ -432,6 +435,7 @@ function BixiRentalFlow({ user, onClose }) {
       })
 
       setOpenRental(null)
+      trackEvent('bixi_returned', { station_name: station.name, email: user.email })
       setNotice(
         `Ride returned at ${station.name}. Final charge: ${formatCurrency(data.rental?.payment?.final_cost)}.`
       )

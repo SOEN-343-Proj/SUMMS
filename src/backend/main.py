@@ -7,6 +7,10 @@ import math
 import os
 import time
 from typing import Any
+from .analytics_service import analytics
+from .observer import event_manager
+from .analytics_service import analytics
+from .observer import event_manager
 
 mapsApiKey = "AIzaSyAOVjtt-TvPi31gZcmeedmc4-cMrq9jO5A"
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", mapsApiKey)
@@ -53,7 +57,6 @@ except ImportError:
         GoogleRoutesApiTransitAdapter,
         TransitDirectionsServiceAdapter,
     )
-
 
 class AdminCodeRequest(BaseModel):
     code: str
@@ -103,6 +106,12 @@ app.add_middleware(
 )
 app.include_router(bixi_router)
 app.include_router(vehicle_router)
+
+@app.middleware("http")
+async def track_requests(request, call_next):
+    event_manager.notify("request_received")
+    response = await call_next(request)
+    return response
 
 def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Calculate distance between two coordinates using Haversine formula (in km)"""
@@ -242,6 +251,9 @@ def admin_login(payload: LoginRequest):
     admin = authenticate_admin(payload.email, payload.password)
     if not admin:
         raise HTTPException(status_code=401, detail="Invalid admin credentials")
+    
+    event_manager.notify("admin_login", {"email": payload.email})
+
     return {"success": True, "admin": admin}
 
 
@@ -250,6 +262,9 @@ def user_login(payload: LoginRequest):
     user = authenticate_user(payload.email, payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid user credentials")
+    
+    event_manager.notify("user_login", {"email": payload.email})
+
     return {"success": True, "user": user}
 
 
@@ -290,6 +305,9 @@ def get_nearest_parking(
             raise HTTPException(status_code=400, detail="Provide either address or both lat/lng coordinates")
 
         nearby_spots = get_nearby_parking_spots(lat, lng, radius)
+
+        event_manager.notify("parking_search", {"lat": lat, "lng": lng, "radius": radius})
+
         return NearbyParkingResponse(
             spots=[ParkingSpot(**spot) for spot in nearby_spots],
             count=len(nearby_spots)
@@ -298,3 +316,20 @@ def get_nearest_parking(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error fetching parking spots: {str(e)}")
+
+@app.get("/admin/analytics")
+def get_admin_analytics():
+    return analytics.get_stats()
+
+class FrontendEventRequest(BaseModel):
+    event: str
+    data: dict[str, Any] | None = None
+
+@app.post("/analytics/event")
+def track_frontend_event(payload: FrontendEventRequest):
+    allowed = {"feature_opened", "bixi_reserved", "bixi_payment", "bixi_returned",
+               "vehicle_rented", "vehicle_returned", "vehicle_listed", "transit_route_searched"}
+    if payload.event not in allowed:
+        raise HTTPException(status_code=400, detail="Unknown event")
+    event_manager.notify(payload.event, payload.data)
+    return {"ok": True}

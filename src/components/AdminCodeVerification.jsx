@@ -4,7 +4,7 @@ import '../styles/Login.css'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
 function AdminCodeVerification({ onSuccess, onBack }) {
-  const [adminCode, setAdminCode] = useState('')
+  const [adminCode, setAdminCode] = useState(import.meta.env.DEV ? 'ADMIN2025' : '')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
@@ -46,9 +46,21 @@ function AdminCodeVerification({ onSuccess, onBack }) {
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label htmlFor="adminCode">Admin Code</label>
+          {/* Hidden username field so browsers offer to save the password */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            defaultValue="admin"
+            readOnly
+            style={{ display: "none" }}
+            aria-hidden="true"
+          />
           <input
             type="password"
             id="adminCode"
+            name="password"
+            autoComplete="current-password"
             value={adminCode}
             onChange={(e) => setAdminCode(e.target.value)}
             placeholder="Enter admin code"

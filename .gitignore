@@ -25,4 +25,5 @@ dist-ssr
 *.sw?
 
 .env
-
+# Analytics file
+analytics_data.json
