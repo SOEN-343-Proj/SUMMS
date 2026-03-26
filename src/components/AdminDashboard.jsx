@@ -1,16 +1,105 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 import "../styles/AdminDashboard.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+const PIE_COLORS = ["#e1ff73", "#667eea", "#f093fb", "#f5576c", "#43e97b"];
+
+const EVENT_LABELS = {
+  admin_login: "Admin Login",
+  user_login: "User Login",
+  parking_search: "Parking Search",
+  uber_bixi_search: "Uber/Bixi Search",
+};
+
+const EVENT_ICONS = {
+  admin_login: "🔐",
+  user_login: "👤",
+  parking_search: "🅿️",
+  uber_bixi_search: "🚲",
+};
+
+function formatHour(isoKey) {
+  const date = new Date(isoKey);
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function formatTimestamp(iso) {
+  const date = new Date(iso);
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function buildHourlyChartData(hourlyBuckets) {
+  if (!hourlyBuckets || Object.keys(hourlyBuckets).length === 0) return [];
+
+  // Build last 24 hours of slots
+  const now = new Date();
+  const slots = [];
+  for (let i = 23; i >= 0; i--) {
+    const d = new Date(now);
+    d.setUTCMinutes(0, 0, 0);
+    d.setUTCHours(d.getUTCHours() - i);
+    const key = d.toISOString().slice(0, 13) + ":00:00+00:00";
+    slots.push({ key, label: formatHour(d) });
+  }
+
+  return slots.map(({ key, label }) => ({
+    hour: label,
+    requests: hourlyBuckets[key] || 0,
+  }));
+}
+
+function buildPieData(serviceUsage) {
+  const labelMap = {
+    admin_login: "Admin Logins",
+    user_login: "User Logins",
+    parking: "Parking",
+    uber_bixi: "Uber/Bixi",
+  };
+  return Object.entries(serviceUsage).map(([key, value]) => ({
+    name: labelMap[key] || key,
+    value,
+  }));
+}
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="chart-tooltip">
+        <p className="tooltip-label">{label}</p>
+        <p className="tooltip-value">{payload[0].value} requests</p>
+      </div>
+    );
+  }
+  return null;
+};
 
 function AdminDashboard({ admin, onLogout }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  async function fetchAnalytics() {
+  const fetchAnalytics = useCallback(async () => {
     try {
-      setLoading(true);
       const res = await fetch(`${API_BASE_URL}/admin/analytics`);
       const data = await res.json();
 
@@ -20,17 +109,23 @@ function AdminDashboard({ admin, onLogout }) {
       }
 
       setStats(data);
+      setLastUpdated(new Date());
       setError("");
     } catch {
       setError("Unable to connect to backend");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     fetchAnalytics();
-  }, []);
+    const interval = setInterval(fetchAnalytics, 30000);
+    return () => clearInterval(interval);
+  }, [fetchAnalytics]);
+
+  const hourlyData = stats ? buildHourlyChartData(stats.hourly_buckets) : [];
+  const pieData = stats ? buildPieData(stats.service_usage) : [];
 
   return (
     <div className="admin-dashboard">
@@ -40,50 +135,159 @@ function AdminDashboard({ admin, onLogout }) {
           <p className="welcome-text">Welcome, {admin.name}</p>
           <p className="admin-code">Admin Code: {admin.code}</p>
         </div>
-        <button className="logout-btn" onClick={onLogout}>
-          Logout
-        </button>
+        <div className="header-right">
+          {lastUpdated && (
+            <p className="last-updated">
+              Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
+            </p>
+          )}
+          <button className="refresh-btn" onClick={fetchAnalytics}>↻ Refresh</button>
+          <button className="logout-btn" onClick={onLogout}>Logout</button>
+        </div>
       </div>
 
       <div className="dashboard-content">
-        {loading && <p>Loading analytics...</p>}
-        {error && <p style={{ color: "red" }}>{error}</p>}
+        {loading && <p className="loading-text">Loading analytics...</p>}
+        {error && <p className="error-text">{error}</p>}
 
         {stats && (
-          <div className="analytics-grid">
-
-            <div className="card">
-              <h3>Total Requests</h3>
-              <p>{stats.total_requests}</p>
+          <>
+            {/* ── Stat Cards ── */}
+            <div className="stat-cards">
+              <div className="card">
+                <span className="card-icon">🌐</span>
+                <div>
+                  <h3>Total Requests</h3>
+                  <p>{stats.total_requests.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="card">
+                <span className="card-icon">🅿️</span>
+                <div>
+                  <h3>Parking Searches</h3>
+                  <p>{stats.parking_searches.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="card">
+                <span className="card-icon">🔐</span>
+                <div>
+                  <h3>Admin Logins</h3>
+                  <p>{stats.admin_logins.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="card">
+                <span className="card-icon">👤</span>
+                <div>
+                  <h3>User Logins</h3>
+                  <p>{stats.user_logins.toLocaleString()}</p>
+                </div>
+              </div>
             </div>
 
-            <div className="card">
-              <h3>Parking Searches</h3>
-              <p>{stats.parking_searches}</p>
+            {/* ── Charts Row ── */}
+            <div className="charts-row">
+              <div className="chart-box wide">
+                <h3>Activity — Last 24 Hours</h3>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={hourlyData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
+                    <XAxis
+                      dataKey="hour"
+                      tick={{ fill: "#999", fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+                      interval={3}
+                    />
+                    <YAxis
+                      tick={{ fill: "#999", fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Line
+                      type="monotone"
+                      dataKey="requests"
+                      stroke="#e1ff73"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 5, fill: "#e1ff73", stroke: "#282c34", strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="chart-box">
+                <h3>Service Breakdown</h3>
+                {pieData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="45%"
+                        innerRadius={55}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {pieData.map((_, index) => (
+                          <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Legend
+                        iconType="circle"
+                        iconSize={8}
+                        formatter={(value) => (
+                          <span style={{ color: "#ccc", fontSize: "12px" }}>{value}</span>
+                        )}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "rgba(30,35,45,0.95)",
+                          border: "1px solid rgba(225,255,115,0.3)",
+                          borderRadius: "8px",
+                          color: "#fff",
+                          fontSize: "13px",
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="no-data">No service data yet</p>
+                )}
+              </div>
             </div>
 
-            <div className="card">
-              <h3>Admin Logins</h3>
-              <p>{stats.admin_logins}</p>
+            {/* ── Recent Events Feed ── */}
+            <div className="event-feed">
+              <h3>Recent Activity</h3>
+              {stats.event_log && stats.event_log.length > 0 ? (
+                <ul className="event-list">
+                  {stats.event_log.slice(0, 20).map((entry, i) => (
+                    <li key={i} className="event-item">
+                      <span className="event-icon">
+                        {EVENT_ICONS[entry.event] || "•"}
+                      </span>
+                      <span className="event-label">
+                        {EVENT_LABELS[entry.event] || entry.event}
+                        {entry.data?.email && (
+                          <span className="event-meta"> — {entry.data.email}</span>
+                        )}
+                        {entry.data?.lat !== undefined && (
+                          <span className="event-meta">
+                            {" "}— {entry.data.lat.toFixed(3)}, {entry.data.lng.toFixed(3)}
+                          </span>
+                        )}
+                      </span>
+                      <span className="event-time">{formatTimestamp(entry.timestamp)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="no-data">No events recorded yet</p>
+              )}
             </div>
-
-            <div className="card">
-              <h3>User Logins</h3>
-              <p>{stats.user_logins}</p>
-            </div>
-
-            <div className="card full-width">
-              <h3>Service Usage</h3>
-              <ul>
-                {Object.entries(stats.service_usage).map(([key, value]) => (
-                  <li key={key}>
-                    {key}: {value}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-          </div>
+          </>
         )}
       </div>
     </div>
