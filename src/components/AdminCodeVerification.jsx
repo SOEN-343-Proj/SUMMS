@@ -46,9 +46,21 @@ function AdminCodeVerification({ onSuccess, onBack }) {
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label htmlFor="adminCode">Admin Code</label>
+          {/* Hidden username field so browsers offer to save the password */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            defaultValue="admin"
+            readOnly
+            style={{ display: "none" }}
+            aria-hidden="true"
+          />
           <input
             type="password"
             id="adminCode"
+            name="password"
+            autoComplete="current-password"
             value={adminCode}
             onChange={(e) => setAdminCode(e.target.value)}
             placeholder="Enter admin code"
