@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
@@ -16,23 +18,8 @@ NEARBY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 GEOCODE_CACHE: dict[str, tuple[float, tuple[float, float]]] = {}
 
 try:
-    from .transit_adapters import (
-        GoogleApiAdapter,
-        GoogleDirectionsApiTransitAdapter,
-        GoogleGeocodingAdapter,
-        GoogleRoutesApiTransitAdapter,
-        TransitDirectionsServiceAdapter,
-    )
-except ImportError:
-    from transit_adapters import (  # pragma: no cover
-        GoogleApiAdapter,
-        GoogleDirectionsApiTransitAdapter,
-        GoogleGeocodingAdapter,
-        GoogleRoutesApiTransitAdapter,
-        TransitDirectionsServiceAdapter,
-    )
-
-try:
+    from .Sprint1Implementation.bixi_router import router as bixi_router
+    from .Sprint1Implementation.vehicle_router import router as vehicle_router
     from .credentials import (
         authenticate_admin,
         authenticate_user,
@@ -41,7 +28,16 @@ try:
         register_user,
         verify_admin_code,
     )
+    from .transit_adapters import (
+        GoogleApiAdapter,
+        GoogleDirectionsApiTransitAdapter,
+        GoogleGeocodingAdapter,
+        GoogleRoutesApiTransitAdapter,
+        TransitDirectionsServiceAdapter,
+    )
 except ImportError:
+    from .Sprint1Implementation.bixi_router import router as bixi_router  # pragma: no cover
+    from .Sprint1Implementation.vehicle_router import router as vehicle_router  # pragma: no cover
     from credentials import (  # pragma: no cover
         authenticate_admin,
         authenticate_user,
@@ -49,6 +45,13 @@ except ImportError:
         get_all_users,
         register_user,
         verify_admin_code,
+    )
+    from transit_adapters import (  # pragma: no cover
+        GoogleApiAdapter,
+        GoogleDirectionsApiTransitAdapter,
+        GoogleGeocodingAdapter,
+        GoogleRoutesApiTransitAdapter,
+        TransitDirectionsServiceAdapter,
     )
 
 
@@ -93,10 +96,13 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(bixi_router)
+app.include_router(vehicle_router)
 
 def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Calculate distance between two coordinates using Haversine formula (in km)"""

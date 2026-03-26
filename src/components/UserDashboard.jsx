@@ -3,11 +3,15 @@ import '../styles/UserDashboard.css'
 import ParkingMap from './ParkingMap'
 import UberBixiMap from './UberBixiMap'
 import PublicTransitHub from './PublicTransitHub'
+import BixiRentalFlow from './BixiRentalFlow'
+import VehicleRentalFlow from './VehicleRentalFlow'
 
 function UserDashboard({ user, onLogout }) {
   const [showParkingMap, setShowParkingMap] = useState(false)
   const [showUberBixiMap, setShowUberBixiMap] = useState(false)
   const [showPublicTransitHub, setShowPublicTransitHub] = useState(false)
+  const [showBixiRental, setShowBixiRental] = useState(false)
+  const [showVehicleRental, setShowVehicleRental] = useState(false)
 
   if (showPublicTransitHub) {
     return <PublicTransitHub onClose={() => setShowPublicTransitHub(false)} />
@@ -17,6 +21,18 @@ function UserDashboard({ user, onLogout }) {
     <div className="user-dashboard">
       {showParkingMap && <ParkingMap onClose={() => setShowParkingMap(false)} />}
       {showUberBixiMap && <UberBixiMap onClose={() => setShowUberBixiMap(false)} />}
+      {showBixiRental && (
+        <BixiRentalFlow
+          user={user}
+          onClose={() => setShowBixiRental(false)}
+        />
+      )}
+      {showVehicleRental && (
+        <VehicleRentalFlow
+          user={user}
+          onClose={() => setShowVehicleRental(false)}
+        />
+      )}
 
       <div className="dashboard-header">
         <div>
@@ -57,7 +73,14 @@ function UserDashboard({ user, onLogout }) {
         <div className="dashboard-section">
           <h2> Rental Service </h2>
           <p className="section-info">Find and manage rental services</p>
-          <button className="action-btn">Search</button>
+          <div className="rental-actions">
+            <button className="action-btn" onClick={() => setShowBixiRental(true)}>
+              Bixi Rental
+            </button>
+            <button className="action-btn" onClick={() => setShowVehicleRental(true)}>
+              Vehicle Rental
+            </button>
+          </div>
         </div>
       </div>
 
