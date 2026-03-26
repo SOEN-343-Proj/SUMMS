@@ -291,7 +291,7 @@ function AdminDashboard({ admin, onLogout }) {
         )}
       </div>
     </div>
-  )
+  );
 }
 
-export default AdminDashboard
+export default AdminDashboard;

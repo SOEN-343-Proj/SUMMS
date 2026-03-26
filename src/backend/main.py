@@ -9,6 +9,8 @@ import time
 from typing import Any
 from .analytics_service import analytics
 from .observer import event_manager
+from .analytics_service import analytics
+from .observer import event_manager
 
 mapsApiKey = "AIzaSyAOVjtt-TvPi31gZcmeedmc4-cMrq9jO5A"
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", mapsApiKey)
