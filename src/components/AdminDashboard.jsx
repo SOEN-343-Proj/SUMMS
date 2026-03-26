@@ -13,6 +13,8 @@ import {
 } from "recharts";
 import "../styles/AdminDashboard.css";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
 const PIE_COLORS = ["#e1ff73", "#667eea", "#f093fb", "#f5576c", "#43e97b"];
 
 const EVENT_LABELS = {

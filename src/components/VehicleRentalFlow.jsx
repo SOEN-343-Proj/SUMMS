@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import '../styles/ParkingMap.css'
 import '../styles/VehicleRentalFlow.css'
+import { trackEvent } from '../services/analytics'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 const DEFAULT_PAYMENT_METHODS = [
@@ -273,6 +274,7 @@ function VehicleRentalFlow({ user, onClose }) {
       })
 
       setNotice(`${vehicle.make} ${vehicle.model} is now in your vehicles. Payment authorized with ${selectedPaymentOption.name}.`)
+      trackEvent('vehicle_rented', { vehicle_type: vehicle.vehicle_type, make: vehicle.make, model: vehicle.model, daily_rate: vehicle.daily_rate, payment_method: paymentMethod, email: user.email })
       setShowPaymentModal(false)
       setSelectedVehicleForPayment(null)
       await loadVehicles()
@@ -311,6 +313,7 @@ function VehicleRentalFlow({ user, onClose }) {
           : formatCurrency(vehicle.daily_rate)
 
       setNotice(`${vehicle.make} ${vehicle.model} was returned. Amount billed: ${billedText}.`)
+      trackEvent('vehicle_returned', { vehicle_type: vehicle.vehicle_type, make: vehicle.make, model: vehicle.model, email: user.email })
       await loadVehicles()
     } catch (err) {
       setError(err.message)
@@ -357,6 +360,7 @@ function VehicleRentalFlow({ user, onClose }) {
 
       const addedVehicle = data?.vehicle
       setNotice(`Added ${buildVehicleTitle(addedVehicle || payload)} to the marketplace.`)
+      trackEvent('vehicle_listed', { vehicle_type: payload.vehicle_type, make: payload.make, model: payload.model, email: user.email })
       setVehicleForm(initialVehicleForm)
       await loadVehicles()
     } catch (err) {

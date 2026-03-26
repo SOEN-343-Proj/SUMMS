@@ -314,3 +314,20 @@ def get_nearest_parking(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error fetching parking spots: {str(e)}")
+
+@app.get("/admin/analytics")
+def get_admin_analytics():
+    return analytics.get_stats()
+
+class FrontendEventRequest(BaseModel):
+    event: str
+    data: dict[str, Any] | None = None
+
+@app.post("/analytics/event")
+def track_frontend_event(payload: FrontendEventRequest):
+    allowed = {"feature_opened", "bixi_reserved", "bixi_payment", "bixi_returned",
+               "vehicle_rented", "vehicle_returned", "vehicle_listed", "transit_route_searched"}
+    if payload.event not in allowed:
+        raise HTTPException(status_code=400, detail="Unknown event")
+    event_manager.notify(payload.event, payload.data)
+    return {"ok": True}

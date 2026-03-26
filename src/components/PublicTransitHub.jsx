@@ -3,6 +3,7 @@ import L from 'leaflet'
 import '../styles/PublicTransitHub.css'
 import LeafletMap from './LeafletMap'
 import { addressLookupAdapter, transitDirectionsAdapter } from '../services/transitAdapters'
+import { trackEvent } from '../services/analytics'
 
 const DEFAULT_CENTER = [45.5017, -73.5673]
 
@@ -349,6 +350,7 @@ function PublicTransitHub({ onClose }) {
       setRouteOptions(routes)
       setSelectedRouteIndex(0)
       setDetailsRouteIndex(0)
+      trackEvent('transit_route_searched', { origin: resolvedOriginLabel, destination: resolvedDestinationLabel, route_count: routes.length })
 
       const firstRoute = routes[0]
       if (firstRoute.startLocation) {
