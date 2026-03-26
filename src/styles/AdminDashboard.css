@@ -222,6 +222,30 @@
     gap: 2px;
 }
 
+.event-list.scrollable {
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.event-list.scrollable::-webkit-scrollbar {
+    width: 6px;
+}
+
+.event-list.scrollable::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 3px;
+}
+
+.event-list.scrollable::-webkit-scrollbar-thumb {
+    background: rgba(225, 255, 115, 0.3);
+    border-radius: 3px;
+}
+
+.event-list.scrollable::-webkit-scrollbar-thumb:hover {
+    background: rgba(225, 255, 115, 0.5);
+}
+
 .event-item {
     display: flex;
     align-items: center;

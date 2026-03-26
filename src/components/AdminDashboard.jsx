@@ -22,6 +22,14 @@ const EVENT_LABELS = {
   user_login: "User Login",
   parking_search: "Parking Search",
   uber_bixi_search: "Uber/Bixi Search",
+  bixi_reserved: "Bixi Reserved",
+  bixi_payment: "Bixi Payment",
+  bixi_returned: "Bixi Returned",
+  vehicle_rented: "Vehicle Rented",
+  vehicle_returned: "Vehicle Returned",
+  vehicle_listed: "Vehicle Listed",
+  transit_route_searched: "Transit Route Search",
+  feature_opened: "Feature Opened",
 };
 
 const EVENT_ICONS = {
@@ -29,6 +37,14 @@ const EVENT_ICONS = {
   user_login: "👤",
   parking_search: "🅿️",
   uber_bixi_search: "🚲",
+  bixi_reserved: "🚲",
+  bixi_payment: "💳",
+  bixi_returned: "✅",
+  vehicle_rented: "🚗",
+  vehicle_returned: "🏁",
+  vehicle_listed: "📋",
+  transit_route_searched: "🚌",
+  feature_opened: "📂",
 };
 
 function formatHour(isoKey) {
@@ -50,7 +66,6 @@ function formatTimestamp(iso) {
 function buildHourlyChartData(hourlyBuckets) {
   if (!hourlyBuckets || Object.keys(hourlyBuckets).length === 0) return [];
 
-  // Build last 24 hours of slots
   const now = new Date();
   const slots = [];
   for (let i = 23; i >= 0; i--) {
@@ -68,16 +83,21 @@ function buildHourlyChartData(hourlyBuckets) {
 }
 
 function buildPieData(serviceUsage) {
+  // Exclude login entries
+  const excluded = new Set(["admin_login", "user_login"]);
   const labelMap = {
-    admin_login: "Admin Logins",
-    user_login: "User Logins",
     parking: "Parking",
     uber_bixi: "Uber/Bixi",
+    bixi: "Bixi",
+    vehicle_rental: "Vehicle Rental",
+    transit: "Transit",
   };
-  return Object.entries(serviceUsage).map(([key, value]) => ({
-    name: labelMap[key] || key,
-    value,
-  }));
+  return Object.entries(serviceUsage)
+    .filter(([key]) => !excluded.has(key))
+    .map(([key, value]) => ({
+      name: labelMap[key] || key,
+      value,
+    }));
 }
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -162,13 +182,6 @@ function AdminDashboard({ admin, onLogout }) {
                 </div>
               </div>
               <div className="card">
-                <span className="card-icon">🅿️</span>
-                <div>
-                  <h3>Parking Searches</h3>
-                  <p>{stats.parking_searches.toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="card">
                 <span className="card-icon">🔐</span>
                 <div>
                   <h3>Admin Logins</h3>
@@ -180,6 +193,45 @@ function AdminDashboard({ admin, onLogout }) {
                 <div>
                   <h3>User Logins</h3>
                   <p>{stats.user_logins.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="card">
+                <span className="card-icon">🅿️</span>
+                <div>
+                  <h3>Parking Searches</h3>
+                  <p>{stats.parking_searches.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Service Stat Cards ── */}
+            <div className="stat-cards">
+              <div className="card">
+                <span className="card-icon">🚲</span>
+                <div>
+                  <h3>Bixi Reservations</h3>
+                  <p>{(stats.bixi_reservations ?? 0).toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="card">
+                <span className="card-icon">✅</span>
+                <div>
+                  <h3>Bixi Rides Completed</h3>
+                  <p>{(stats.bixi_rides_completed ?? 0).toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="card">
+                <span className="card-icon">🚗</span>
+                <div>
+                  <h3>Vehicle Rentals</h3>
+                  <p>{(stats.vehicle_rentals ?? 0).toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="card">
+                <span className="card-icon">🚌</span>
+                <div>
+                  <h3>Transit Searches</h3>
+                  <p>{(stats.transit_searches ?? 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -262,8 +314,8 @@ function AdminDashboard({ admin, onLogout }) {
             <div className="event-feed">
               <h3>Recent Activity</h3>
               {stats.event_log && stats.event_log.length > 0 ? (
-                <ul className="event-list">
-                  {stats.event_log.slice(0, 20).map((entry, i) => (
+                <ul className="event-list scrollable">
+                  {stats.event_log.slice(0, 50).map((entry, i) => (
                     <li key={i} className="event-item">
                       <span className="event-icon">
                         {EVENT_ICONS[entry.event] || "•"}
@@ -272,6 +324,18 @@ function AdminDashboard({ admin, onLogout }) {
                         {EVENT_LABELS[entry.event] || entry.event}
                         {entry.data?.email && (
                           <span className="event-meta"> — {entry.data.email}</span>
+                        )}
+                        {entry.data?.make && (
+                          <span className="event-meta"> — {entry.data.make} {entry.data.model}</span>
+                        )}
+                        {entry.data?.station_name && (
+                          <span className="event-meta"> — {entry.data.station_name}</span>
+                        )}
+                        {entry.data?.origin && (
+                          <span className="event-meta"> — {entry.data.origin} → {entry.data.destination}</span>
+                        )}
+                        {entry.data?.feature && (
+                          <span className="event-meta"> — {entry.data.feature}</span>
                         )}
                         {entry.data?.lat !== undefined && (
                           <span className="event-meta">
