@@ -1,36 +1,48 @@
-import { useState } from 'react'
 import '../styles/UserDashboard.css'
 import ParkingMap from './ParkingMap'
 import UberBixiMap from './UberBixiMap'
 import PublicTransitHub from './PublicTransitHub'
 import BixiRentalFlow from './BixiRentalFlow'
 import VehicleRentalFlow from './VehicleRentalFlow'
+import { useUserDashboardController } from '../controllers/useUserDashboardController'
 
 function UserDashboard({ user, onLogout }) {
-  const [showParkingMap, setShowParkingMap] = useState(false)
-  const [showUberBixiMap, setShowUberBixiMap] = useState(false)
-  const [showPublicTransitHub, setShowPublicTransitHub] = useState(false)
-  const [showBixiRental, setShowBixiRental] = useState(false)
-  const [showVehicleRental, setShowVehicleRental] = useState(false)
+  const {
+    showParkingMap,
+    showUberBixiMap,
+    showPublicTransitHub,
+    showBixiRental,
+    showVehicleRental,
+    openParkingMap,
+    closeParkingMap,
+    openUberBixiMap,
+    closeUberBixiMap,
+    openPublicTransitHub,
+    closePublicTransitHub,
+    openBixiRental,
+    closeBixiRental,
+    openVehicleRental,
+    closeVehicleRental,
+  } = useUserDashboardController()
 
   if (showPublicTransitHub) {
-    return <PublicTransitHub onClose={() => setShowPublicTransitHub(false)} />
+    return <PublicTransitHub onClose={closePublicTransitHub} />
   }
 
   return (
     <div className="user-dashboard">
-      {showParkingMap && <ParkingMap onClose={() => setShowParkingMap(false)} />}
-      {showUberBixiMap && <UberBixiMap onClose={() => setShowUberBixiMap(false)} />}
+      {showParkingMap && <ParkingMap onClose={closeParkingMap} />}
+      {showUberBixiMap && <UberBixiMap onClose={closeUberBixiMap} />}
       {showBixiRental && (
         <BixiRentalFlow
           user={user}
-          onClose={() => setShowBixiRental(false)}
+          onClose={closeBixiRental}
         />
       )}
       {showVehicleRental && (
         <VehicleRentalFlow
           user={user}
-          onClose={() => setShowVehicleRental(false)}
+          onClose={closeVehicleRental}
         />
       )}
 
@@ -49,7 +61,7 @@ function UserDashboard({ user, onLogout }) {
         <div className="dashboard-section">
           <h2> Find Parking </h2>
           <p className="section-info">Find parking spots near your location</p>
-          <button className="action-btn" onClick={() => setShowParkingMap(true)}>
+          <button className="action-btn" onClick={openParkingMap}>
             Search
           </button>
         </div>
@@ -57,7 +69,7 @@ function UserDashboard({ user, onLogout }) {
         <div className="dashboard-section">
           <h2> Find my Uber/Bixi </h2>
           <p className="section-info">Your Uber & Bixi all in one spot</p>
-          <button className="action-btn" onClick={() => setShowUberBixiMap(true)}>
+          <button className="action-btn" onClick={openUberBixiMap}>
             Search
           </button>
         </div>
@@ -65,7 +77,7 @@ function UserDashboard({ user, onLogout }) {
         <div className="dashboard-section">
           <h2> Public Transit </h2>
           <p className="section-info">Plan a trip with bus, metro, and walking directions</p>
-          <button className="action-btn" onClick={() => setShowPublicTransitHub(true)}>
+          <button className="action-btn" onClick={openPublicTransitHub}>
             Search
           </button>
         </div>
@@ -74,10 +86,10 @@ function UserDashboard({ user, onLogout }) {
           <h2> Rental Service </h2>
           <p className="section-info">Find and manage rental services</p>
           <div className="rental-actions">
-            <button className="action-btn" onClick={() => setShowBixiRental(true)}>
+            <button className="action-btn" onClick={openBixiRental}>
               Bixi Rental
             </button>
-            <button className="action-btn" onClick={() => setShowVehicleRental(true)}>
+            <button className="action-btn" onClick={openVehicleRental}>
               Vehicle Rental
             </button>
           </div>

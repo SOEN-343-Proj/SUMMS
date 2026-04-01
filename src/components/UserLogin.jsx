@@ -1,90 +1,21 @@
-import { useState } from 'react'
 import '../styles/Login.css'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+import { useUserAuthController } from '../controllers/useAuthControllers'
 
 function UserLogin({ onSuccess, onBack }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [error, setError] = useState('')
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    
-    // Basic validation
-    if (!email || !password) {
-      setError('Please fill in all fields')
-      return
-    }
-
-    if (!email.includes('@')) {
-      setError('Please enter a valid email address')
-      return
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
-      return
-    }
-
-    if (isSignUp) {
-      if (!name) {
-        setError('Please enter your name')
-        return
-      }
-
-      setIsLoading(true)
-      try {
-        const response = await fetch(`${API_BASE_URL}/auth/user/register`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ name, email, password })
-        })
-
-        const data = await response.json()
-        if (!response.ok) {
-          setError(data?.detail || 'Registration failed')
-          return
-        }
-
-        setError('')
-        onSuccess(data.user)
-      } catch {
-        setError('Unable to connect to server. Please try again.')
-      } finally {
-        setIsLoading(false)
-      }
-    } else {
-      setIsLoading(true)
-      try {
-        const response = await fetch(`${API_BASE_URL}/auth/user/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ email, password })
-        })
-
-        const data = await response.json()
-        if (!response.ok) {
-          setError(data?.detail || 'Invalid email or password')
-          return
-        }
-
-        setError('')
-        onSuccess(data.user)
-      } catch {
-        setError('Unable to connect to server. Please try again.')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-  }
+  const {
+    email,
+    password,
+    name,
+    error,
+    isSignUp,
+    isLoading,
+    setEmail,
+    setPassword,
+    setName,
+    handleSubmit,
+    showSignUp,
+    showLogin,
+  } = useUserAuthController({ onSuccess })
 
   return (
     <div className="login-container">
@@ -145,16 +76,12 @@ function UserLogin({ onSuccess, onBack }) {
         {isSignUp ? (
           <p>
             Already have an account?{' '}
-            <button 
-              className="link-btn" 
-              onClick={() => {
-                setIsSignUp(false)
-                setError('')
-                setName('')
-              }}
-            >
-              Login
-            </button>
+              <button 
+                className="link-btn" 
+                onClick={showLogin}
+              >
+                Login
+              </button>
           </p>
         ) : (
           <>
@@ -162,10 +89,7 @@ function UserLogin({ onSuccess, onBack }) {
               Don't have an account?{' '}
               <button 
                 className="link-btn" 
-                onClick={() => {
-                  setIsSignUp(true)
-                  setError('')
-                }}
+                onClick={showSignUp}
               >
                 Sign Up
               </button>
