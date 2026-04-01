@@ -11,12 +11,13 @@ from ..models.vehicle_model import VehicleInUseError
 
 class VehicleCreateRequest(BaseModel):
     listed_by_email: EmailStr
+    target: str = "marketplace"
     id: str | None = None
     vehicle_type: str
     make: str
     model: str
     year: int
-    daily_rate: float
+    daily_rate: float | None = None
     color: str | None = None
     transmission: str | None = None
     seats: int | None = None
@@ -61,7 +62,7 @@ router = APIRouter()
 @router.post("/vehicles")
 def create_marketplace_vehicle(payload: VehicleCreateRequest):
     try:
-        return vehicle_controller.create_marketplace_vehicle(payload.model_dump())
+        return vehicle_controller.create_vehicle(payload.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -86,6 +87,23 @@ def update_vehicle_listing(vehicle_id: str, payload: VehicleUpdateRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Unable to update vehicle: {str(exc)}") from exc
+
+
+@router.delete("/vehicles/{vehicle_id}")
+def delete_vehicle(vehicle_id: str, user_email: EmailStr):
+    try:
+        return vehicle_controller.delete_vehicle(
+            vehicle_id=vehicle_id,
+            requester_email=str(user_email),
+        )
+    except VehicleInUseError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Unable to remove vehicle: {str(exc)}") from exc
 
 
 @router.get("/vehicles/available")

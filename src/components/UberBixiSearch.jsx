@@ -22,7 +22,7 @@ function UberBixiSearch({ onSearch, onClose }) {
       <div className="parking-search-overlay">
         <div className="parking-search-modal">
           <div className="search-header">
-            <h2>Find Uber / Bixi</h2>
+            <h2>Find Uber</h2>
             <button className="close-btn" onClick={onClose}>
               ✕
             </button>

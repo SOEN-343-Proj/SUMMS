@@ -10,11 +10,7 @@ function UberBixiMap({ onClose }) {
   const layersRef = useRef([])
   const {
     searchLocation,
-    loading,
-    error,
-    bixiStations,
     setSearchLocation,
-    runSearch,
     requestUberFromSearchLocation,
   } = useUberBixiController()
 
@@ -23,7 +19,6 @@ function UberBixiMap({ onClose }) {
     if (!map || !searchLocation) return
 
     map.setView([searchLocation.lat, searchLocation.lng], 15)
-    runSearch(searchLocation.lat, searchLocation.lng)
   }, [searchLocation])
 
   useEffect(() => {
@@ -39,8 +34,6 @@ function UberBixiMap({ onClose }) {
     layersRef.current.forEach((layer) => layer.remove())
     layersRef.current = []
 
-    const bounds = [[searchLocation.lat, searchLocation.lng]]
-
     const userMarker = L.marker([searchLocation.lat, searchLocation.lng])
       .bindPopup('<strong>Searched Location</strong>')
       .addTo(map)
@@ -54,32 +47,7 @@ function UberBixiMap({ onClose }) {
       fillOpacity: 0.08,
     }).addTo(map)
     layersRef.current.push(radiusCircle)
-
-    bixiStations.forEach((station) => {
-      bounds.push([station.lat, station.lng])
-
-      const marker = L.circleMarker([station.lat, station.lng], {
-        radius: 10,
-        fillColor: '#2563eb',
-        color: '#fff',
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.9,
-      })
-        .bindPopup(
-          `<strong>${station.name || 'BIXI Station'}</strong><br/>
-          Bikes: ${station.bikesAvailable ?? '?'} / Docks: ${station.docksAvailable ?? '?'}<br/>
-          ${station.distance_km ? `${station.distance_km} km away` : ''}`
-        )
-        .addTo(map)
-
-      layersRef.current.push(marker)
-    })
-
-    if (bounds.length > 1) {
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 })
-    }
-  }, [searchLocation, bixiStations])
+  }, [searchLocation])
 
   return (
     <div className="parking-map-container">
@@ -91,7 +59,7 @@ function UberBixiMap({ onClose }) {
       )}
 
       <div className="parking-map-header">
-        <h2>Find Uber / BIXI Near You</h2>
+        <h2>Find Uber Near You</h2>
         <button className="close-btn" onClick={onClose}>
           ✕
         </button>
@@ -109,56 +77,25 @@ function UberBixiMap({ onClose }) {
 
         {searchLocation && (
           <div className="parking-spots-list">
-            <h3>Results</h3>
+            <h3>Uber</h3>
+            <div className="spot-card available">
+              <div className="spot-header">
+                <h4>Pickup Location</h4>
+                <span className="badge available">Map Ready</span>
+              </div>
+              <p className="spot-info">
+                {searchLocation.label || `${searchLocation.lat.toFixed(5)}, ${searchLocation.lng.toFixed(5)}`}
+              </p>
+              <p className="spot-info">Your selected pickup area is centered on the map.</p>
+            </div>
 
-            {loading && (
-              <p className="spot-info">Searching nearby mobility options...</p>
-            )}
-            {error && <p className="no-spots">{error}</p>}
-
-            {!loading && !error && (
-              <>
-                <div>
-                  <h4 style={{ margin: 0 }}>Uber</h4>
-
-                  <button
-                    className="search-option-btn"
-                    style={{ marginTop: 8 }}
-                    onClick={requestUberFromSearchLocation}
-                  >
-                    Request Uber from this location
-                  </button>
-                </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <h4 style={{ margin: 0 }}>
-                    BIXI Stations ({bixiStations.length})
-                  </h4>
-                  {bixiStations.length > 0 ? (
-                    <div className="spots-scroll">
-                      {bixiStations.map((station) => (
-                        <div
-                          key={station.id ?? `${station.lat}:${station.lng}`}
-                          className="spot-card available"
-                        >
-                          <div className="spot-header">
-                            <h4>{station.name || 'BIXI Station'}</h4>
-                            <span className="badge available">
-                              {station.distance_km ? `${station.distance_km} km` : 'BIXI'}
-                            </span>
-                          </div>
-                          <p className="spot-info">
-                            Bikes: {station.bikesAvailable ?? '?'} | Docks: {station.docksAvailable ?? '?'}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="no-spots">No BIXI stations found nearby</p>
-                  )}
-                </div>
-              </>
-            )}
+            <button
+              className="search-option-btn"
+              style={{ marginTop: 8 }}
+              onClick={requestUberFromSearchLocation}
+            >
+              Request Uber from this location
+            </button>
           </div>
         )}
       </div>

@@ -50,7 +50,7 @@ export function returnVehicle({ userEmail, vehicleId }) {
   })
 }
 
-export function addMarketplaceVehicle(payload) {
+export function addVehicle(payload) {
   return requestApiJson('/vehicles', {
     method: 'POST',
     headers: {
@@ -67,5 +67,12 @@ export function updateMarketplaceVehicle(vehicleId, payload) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+  })
+}
+
+export function removeVehicle({ userEmail, vehicleId }) {
+  const query = new URLSearchParams({ user_email: userEmail })
+  return requestApiJson(`/vehicles/${vehicleId}?${query.toString()}`, {
+    method: 'DELETE',
   })
 }

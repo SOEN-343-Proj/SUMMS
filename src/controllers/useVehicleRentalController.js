@@ -7,8 +7,9 @@ import {
 } from '../models/paymentModel'
 import { fetchBixiPaymentMethods } from '../models/bixiModel'
 import {
-  addMarketplaceVehicle,
+  addVehicle,
   fetchVehicleDashboard,
+  removeVehicle,
   rentVehicle,
   returnVehicle,
   updateMarketplaceVehicle,
@@ -48,10 +49,12 @@ export function useVehicleRentalController({ user }) {
   const [paymentMethods, setPaymentMethods] = useState(DEFAULT_PAYMENT_METHODS)
   const [paymentMethod, setPaymentMethod] = useState(DEFAULT_PAYMENT_METHODS[0].id)
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState('all')
+  const [vehicleDestination, setVehicleDestination] = useState('my_vehicles')
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [selectedVehicleForPayment, setSelectedVehicleForPayment] = useState(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingVehicleId, setEditingVehicleId] = useState('')
+  const [editingVehicleSource, setEditingVehicleSource] = useState('marketplace')
   const [editVehicleForm, setEditVehicleForm] = useState(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState('')
@@ -200,34 +203,41 @@ export function useVehicleRentalController({ user }) {
 
   const handleAddVehicle = async (event) => {
     event.preventDefault()
-    setActionLoading('add-marketplace')
+    const addAction = vehicleDestination === 'my_vehicles' ? 'add-my-vehicles' : 'add-marketplace'
+    setActionLoading(addAction)
     setError('')
     setNotice('')
 
     try {
       const payload = {
+        target: vehicleDestination,
         listed_by_email: user.email,
         vehicle_type: vehicleForm.vehicle_type.trim().toLowerCase(),
         make: vehicleForm.make.trim(),
         model: vehicleForm.model.trim(),
         year: Number(vehicleForm.year),
-        daily_rate: Number(vehicleForm.daily_rate),
         color: vehicleForm.color.trim() || undefined,
         transmission: vehicleForm.transmission.trim() || undefined,
         seats: Number(vehicleForm.seats),
         fuel_type: vehicleForm.fuel_type.trim() || undefined,
+        ...(vehicleDestination === 'marketplace'
+          ? { daily_rate: Number(vehicleForm.daily_rate) }
+          : {}),
       }
 
-      const data = await addMarketplaceVehicle(payload)
+      const data = await addVehicle(payload)
       const addedVehicle = data?.vehicle
+      const destinationLabel = vehicleDestination === 'my_vehicles' ? 'My Vehicles' : 'the marketplace'
 
-      setNotice(`Added ${addedVehicle?.year || payload.year} ${addedVehicle?.make || payload.make} ${addedVehicle?.model || payload.model} to the marketplace.`)
-      trackAnalyticsEvent('vehicle_listed', {
-        vehicle_type: payload.vehicle_type,
-        make: payload.make,
-        model: payload.model,
-        email: user.email,
-      })
+      setNotice(`Added ${addedVehicle?.year || payload.year} ${addedVehicle?.make || payload.make} ${addedVehicle?.model || payload.model} to ${destinationLabel}.`)
+      if (vehicleDestination === 'marketplace') {
+        trackAnalyticsEvent('vehicle_listed', {
+          vehicle_type: payload.vehicle_type,
+          make: payload.make,
+          model: payload.model,
+          email: user.email,
+        })
+      }
       setVehicleForm(initialVehicleForm)
       await loadVehicles()
     } catch (err) {
@@ -239,6 +249,7 @@ export function useVehicleRentalController({ user }) {
 
   const handleOpenEditModal = (vehicle) => {
     setEditingVehicleId(vehicle.id)
+    setEditingVehicleSource(vehicle.vehicle_source || 'marketplace')
     setEditVehicleForm(buildEditFormFromVehicle(vehicle))
     setShowEditModal(true)
   }
@@ -257,7 +268,7 @@ export function useVehicleRentalController({ user }) {
       return
     }
 
-    setActionLoading('update-marketplace')
+    setActionLoading(`update:${editingVehicleId}`)
     setError('')
     setNotice('')
 
@@ -268,20 +279,51 @@ export function useVehicleRentalController({ user }) {
         make: editVehicleForm.make.trim(),
         model: editVehicleForm.model.trim(),
         year: Number(editVehicleForm.year),
-        daily_rate: Number(editVehicleForm.daily_rate),
         color: editVehicleForm.color.trim() || undefined,
         transmission: editVehicleForm.transmission.trim() || undefined,
         seats: Number(editVehicleForm.seats),
         fuel_type: editVehicleForm.fuel_type.trim() || undefined,
+        ...(editingVehicleSource === 'marketplace'
+          ? { daily_rate: Number(editVehicleForm.daily_rate) }
+          : {}),
       }
 
       const data = await updateMarketplaceVehicle(editingVehicleId, payload)
       const updatedVehicle = data?.vehicle
 
-      setNotice(`Updated ${updatedVehicle?.year || payload.year} ${updatedVehicle?.make || payload.make} ${updatedVehicle?.model || payload.model} successfully.`)
+      const destinationLabel = editingVehicleSource === 'personal' ? 'in My Vehicles' : 'listing'
+
+      setNotice(`Updated ${updatedVehicle?.year || payload.year} ${updatedVehicle?.make || payload.make} ${updatedVehicle?.model || payload.model} ${destinationLabel} successfully.`)
       setShowEditModal(false)
       setEditingVehicleId('')
+      setEditingVehicleSource('marketplace')
       setEditVehicleForm(null)
+      await loadVehicles()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const handleRemoveVehicle = async (vehicle) => {
+    const shouldRemove = window.confirm(`Remove ${vehicle.make} ${vehicle.model} from My Vehicles?`)
+    if (!shouldRemove) {
+      return
+    }
+
+    setActionLoading(`remove:${vehicle.id}`)
+    setError('')
+    setNotice('')
+
+    try {
+      const data = await removeVehicle({
+        userEmail: user.email,
+        vehicleId: vehicle.id,
+      })
+      const removedVehicle = data?.vehicle
+
+      setNotice(`Removed ${removedVehicle?.year || vehicle.year} ${removedVehicle?.make || vehicle.make} ${removedVehicle?.model || vehicle.model} from My Vehicles.`)
       await loadVehicles()
     } catch (err) {
       setError(err.message)
@@ -297,10 +339,12 @@ export function useVehicleRentalController({ user }) {
     paymentMethods,
     paymentMethod,
     vehicleTypeFilter,
+    vehicleDestination,
     showPaymentModal,
     selectedVehicleForPayment,
     showEditModal,
     editingVehicleId,
+    editingVehicleSource,
     editVehicleForm,
     loading,
     actionLoading,
@@ -312,10 +356,12 @@ export function useVehicleRentalController({ user }) {
     availableVehicleTypes,
     setPaymentMethod,
     setVehicleTypeFilter,
+    setVehicleDestination,
     setShowPaymentModal,
     setSelectedVehicleForPayment,
     setShowEditModal,
     setEditingVehicleId,
+    setEditingVehicleSource,
     setEditVehicleForm,
     setVehicleForm,
     handleRent,
@@ -325,6 +371,7 @@ export function useVehicleRentalController({ user }) {
     handleAddVehicle,
     handleOpenEditModal,
     handleEditFormChange,
+    handleRemoveVehicle,
     handleSaveVehicleUpdate,
   }
 }

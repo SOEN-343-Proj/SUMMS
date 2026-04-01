@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import '../styles/ParkingMap.css'
 import '../styles/VehicleRentalFlow.css'
 import { useVehicleRentalController } from '../controllers/useVehicleRentalController'
@@ -30,6 +32,11 @@ function buildVehicleTitle(vehicle) {
 
 function buildVehicleMeta(vehicle) {
   const details = [
+    vehicle.vehicle_source === 'personal'
+      ? 'Status: Personal vehicle'
+      : vehicle.vehicle_source === 'rented'
+        ? 'Status: Active rental'
+        : null,
     `Type: ${toTitleCase(vehicle.vehicle_type || 'vehicle')}`,
     vehicle.color ? `Color: ${vehicle.color}` : null,
     vehicle.seats ? `Seats: ${vehicle.seats}` : null,
@@ -45,8 +52,18 @@ function buildVehicleMeta(vehicle) {
   return details.filter(Boolean)
 }
 
-function VehicleCard({ vehicle, actionLabel, actionClass, onAction, onEdit, disabled, loading }) {
+function VehicleCard({ vehicle, actionLabel, actionClass, onAction, onEdit, menuActions = [], disabled, loading }) {
   const metadata = buildVehicleMeta(vehicle)
+  const showRate = vehicle.vehicle_source !== 'personal'
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const hasMenuActions = menuActions.length > 0
+
+  const handleMenuAction = (callback) => {
+    setShowActionsMenu(false)
+    if (callback) {
+      callback()
+    }
+  }
 
   return (
     <div className="vehicle-card">
@@ -54,7 +71,40 @@ function VehicleCard({ vehicle, actionLabel, actionClass, onAction, onEdit, disa
         <h4>
           {buildVehicleTitle(vehicle)}
         </h4>
-        <span className="vehicle-rate">{formatCurrency(vehicle.daily_rate)}/day</span>
+        <div className="vehicle-card-header-actions">
+          {showRate && <span className="vehicle-rate">{formatCurrency(vehicle.daily_rate)}/day</span>}
+          {hasMenuActions && (
+            <div className="vehicle-card-menu">
+              <button
+                className="vehicle-card-menu-toggle"
+                type="button"
+                aria-label={`Manage ${buildVehicleTitle(vehicle)}`}
+                aria-haspopup="menu"
+                aria-expanded={showActionsMenu}
+                onClick={() => setShowActionsMenu((current) => !current)}
+                disabled={disabled || loading}
+              >
+                ...
+              </button>
+              {showActionsMenu && (
+                <div className="vehicle-card-menu-panel" role="menu">
+                  {menuActions.map((action) => (
+                    <button
+                      key={`${vehicle.id}-${action.label}`}
+                      className={`vehicle-card-menu-item ${action.tone || ''}`.trim()}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => handleMenuAction(action.onClick)}
+                      disabled={disabled || loading}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="vehicle-meta-grid">
@@ -85,6 +135,7 @@ function VehicleRentalFlow({ user, onClose }) {
     paymentMethods,
     paymentMethod,
     vehicleTypeFilter,
+    vehicleDestination,
     showPaymentModal,
     selectedVehicleForPayment,
     showEditModal,
@@ -98,12 +149,15 @@ function VehicleRentalFlow({ user, onClose }) {
     selectedPaymentOption,
     samplePaymentInfo,
     availableVehicleTypes,
+    editingVehicleSource,
     setPaymentMethod,
     setVehicleTypeFilter,
+    setVehicleDestination,
     setShowPaymentModal,
     setSelectedVehicleForPayment,
     setShowEditModal,
     setEditingVehicleId,
+    setEditingVehicleSource,
     setEditVehicleForm,
     handleRent,
     handleConfirmRent,
@@ -112,17 +166,24 @@ function VehicleRentalFlow({ user, onClose }) {
     handleAddVehicle,
     handleOpenEditModal,
     handleEditFormChange,
+    handleRemoveVehicle,
     handleSaveVehicleUpdate,
   } = useVehicleRentalController({ user })
 
   const selectedVehicleTitle = selectedVehicleForPayment ? buildVehicleTitle(selectedVehicleForPayment) : ''
+  const addActionLoading =
+    actionLoading === 'add-marketplace' || actionLoading === 'add-my-vehicles'
+  const addSectionTitle = vehicleDestination === 'my_vehicles' ? 'Add Vehicle To My Vehicles' : 'Add Vehicle To Marketplace'
+  const addSubmitLabel = vehicleDestination === 'my_vehicles' ? 'Add To My Vehicles' : 'Add To Marketplace'
+  const isEditingMarketplaceVehicle = editingVehicleSource === 'marketplace'
+  const editActionLoading = actionLoading === `update:${editingVehicleId}`
 
   return (
     <div className="parking-map-container vehicle-rental-container">
       <div className="parking-map-header vehicle-rental-header">
         <div>
-          <h2>Vehicle Rental</h2>
-          <p>Browse available vehicles and add rentals to your vehicles list.</p>
+          <h2>Vehicle Management</h2>
+          <p>Manage your garage, update marketplace listings, and browse vehicles that are available to rent.</p>
         </div>
         <button className="close-btn" type="button" onClick={onClose}>
           ✕
@@ -143,21 +204,59 @@ function VehicleRentalFlow({ user, onClose }) {
                 <VehicleCard
                   key={vehicle.id}
                   vehicle={vehicle}
-                  actionLabel="Return this vehicle"
+                  actionLabel={vehicle.vehicle_source === 'rented' ? 'Return this vehicle' : null}
                   actionClass="return"
-                  onAction={() => handleReturn(vehicle)}
+                  onAction={vehicle.vehicle_source === 'rented' ? () => handleReturn(vehicle) : null}
+                  menuActions={vehicle.vehicle_source === 'personal'
+                    ? [
+                        {
+                          label: 'Edit vehicle',
+                          onClick: () => handleOpenEditModal(vehicle),
+                        },
+                        {
+                          label: 'Remove vehicle',
+                          tone: 'danger',
+                          onClick: () => handleRemoveVehicle(vehicle),
+                        },
+                      ]
+                    : []}
                   disabled={Boolean(actionLoading)}
-                  loading={actionLoading === `return:${vehicle.id}`}
+                  loading={
+                    actionLoading === `return:${vehicle.id}`
+                    || actionLoading === `remove:${vehicle.id}`
+                    || actionLoading === `update:${vehicle.id}`
+                  }
                 />
               ))}
             </div>
           ) : (
-            <p className="vehicle-empty">You have no rented vehicles yet.</p>
+            <p className="vehicle-empty">You have no vehicles in your garage yet.</p>
           )}
         </section>
 
         <section className="vehicle-section marketplace-add-section">
-          <h3>Add Vehicle To Marketplace</h3>
+          <h3>{addSectionTitle}</h3>
+          <div className="vehicle-destination-toggle" role="tablist" aria-label="Vehicle add destination">
+            <button
+              type="button"
+              className={`vehicle-destination-btn ${vehicleDestination === 'marketplace' ? 'active' : ''}`}
+              onClick={() => setVehicleDestination('marketplace')}
+            >
+              Marketplace
+            </button>
+            <button
+              type="button"
+              className={`vehicle-destination-btn ${vehicleDestination === 'my_vehicles' ? 'active' : ''}`}
+              onClick={() => setVehicleDestination('my_vehicles')}
+            >
+              My Vehicles
+            </button>
+          </div>
+          <p className="vehicle-section-copy">
+            {vehicleDestination === 'my_vehicles'
+              ? 'Save a vehicle directly to your garage without listing it for rent.'
+              : 'Create a vehicle listing that other users can rent from the marketplace.'}
+          </p>
           <form className="marketplace-add-form" onSubmit={handleAddVehicle}>
             <input
               name="vehicle_type"
@@ -177,15 +276,18 @@ function VehicleRentalFlow({ user, onClose }) {
               onChange={handleVehicleFormChange}
               required
             />
-            <input
-              name="daily_rate"
-              type="number"
-              min="1"
-              step="0.5"
-              value={vehicleForm.daily_rate}
-              onChange={handleVehicleFormChange}
-              required
-            />
+            {vehicleDestination === 'marketplace' && (
+              <input
+                name="daily_rate"
+                type="number"
+                min="1"
+                step="0.5"
+                value={vehicleForm.daily_rate}
+                onChange={handleVehicleFormChange}
+                placeholder="Daily rate"
+                required
+              />
+            )}
             <input name="color" value={vehicleForm.color} onChange={handleVehicleFormChange} placeholder="Color" />
             <input
               name="transmission"
@@ -202,8 +304,8 @@ function VehicleRentalFlow({ user, onClose }) {
               required
             />
             <input name="fuel_type" value={vehicleForm.fuel_type} onChange={handleVehicleFormChange} placeholder="Fuel type" />
-            <button className="vehicle-action-btn rent" type="submit" disabled={actionLoading === 'add-marketplace'}>
-              {actionLoading === 'add-marketplace' ? 'Adding...' : 'Add To Marketplace'}
+            <button className="vehicle-action-btn rent" type="submit" disabled={addActionLoading}>
+              {addActionLoading ? 'Adding...' : addSubmitLabel}
             </button>
           </form>
         </section>
@@ -333,7 +435,9 @@ function VehicleRentalFlow({ user, onClose }) {
       {showEditModal && editVehicleForm && (
         <div className="payment-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="vehicle-edit-modal-title">
           <div className="payment-modal vehicle-edit-modal">
-            <h3 id="vehicle-edit-modal-title">Update Marketplace Listing</h3>
+            <h3 id="vehicle-edit-modal-title">
+              {isEditingMarketplaceVehicle ? 'Update Marketplace Listing' : 'Update Vehicle'}
+            </h3>
             <form className="marketplace-edit-form" onSubmit={handleSaveVehicleUpdate}>
               <input
                 name="vehicle_type"
@@ -353,15 +457,17 @@ function VehicleRentalFlow({ user, onClose }) {
                 onChange={handleEditFormChange}
                 required
               />
-              <input
-                name="daily_rate"
-                type="number"
-                min="1"
-                step="0.5"
-                value={editVehicleForm.daily_rate}
-                onChange={handleEditFormChange}
-                required
-              />
+              {isEditingMarketplaceVehicle && (
+                <input
+                  name="daily_rate"
+                  type="number"
+                  min="1"
+                  step="0.5"
+                  value={editVehicleForm.daily_rate}
+                  onChange={handleEditFormChange}
+                  required
+                />
+              )}
               <input name="color" value={editVehicleForm.color} onChange={handleEditFormChange} placeholder="Color" />
               <input
                 name="transmission"
@@ -391,14 +497,15 @@ function VehicleRentalFlow({ user, onClose }) {
                   onClick={() => {
                     setShowEditModal(false)
                     setEditingVehicleId('')
+                    setEditingVehicleSource('marketplace')
                     setEditVehicleForm(null)
                   }}
-                  disabled={actionLoading === 'update-marketplace'}
+                  disabled={editActionLoading}
                 >
                   Cancel
                 </button>
-                <button className="vehicle-action-btn edit" type="submit" disabled={actionLoading === 'update-marketplace'}>
-                  {actionLoading === 'update-marketplace' ? 'Saving...' : 'Save Updates'}
+                <button className="vehicle-action-btn edit" type="submit" disabled={editActionLoading}>
+                  {editActionLoading ? 'Saving...' : 'Save Updates'}
                 </button>
               </div>
             </form>

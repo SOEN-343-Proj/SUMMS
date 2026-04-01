@@ -1,6 +1,21 @@
 from __future__ import annotations
 
+from fastapi import HTTPException
+
 from ..models import vehicle_model
+
+
+def create_vehicle(payload: dict):
+    target = str(payload.pop("target", "marketplace")).strip().lower()
+
+    if target == "marketplace":
+        vehicle = vehicle_model.add_marketplace_vehicle(payload)
+        return {"success": True, "vehicle": vehicle, "target": target}
+    if target == "my_vehicles":
+        vehicle = vehicle_model.add_user_vehicle(payload)
+        return {"success": True, "vehicle": vehicle, "target": target}
+
+    raise HTTPException(status_code=400, detail="Vehicle target must be marketplace or my_vehicles.")
 
 
 def create_marketplace_vehicle(payload: dict):
@@ -9,9 +24,17 @@ def create_marketplace_vehicle(payload: dict):
 
 
 def update_vehicle_listing(vehicle_id: str, updates: dict, requester_email: str):
-    vehicle = vehicle_model.update_marketplace_vehicle(
+    vehicle = vehicle_model.update_vehicle(
         vehicle_id=vehicle_id,
         updates=updates,
+        requester_email=requester_email,
+    )
+    return {"success": True, "vehicle": vehicle}
+
+
+def delete_vehicle(vehicle_id: str, requester_email: str):
+    vehicle = vehicle_model.remove_vehicle(
+        vehicle_id=vehicle_id,
         requester_email=requester_email,
     )
     return {"success": True, "vehicle": vehicle}
