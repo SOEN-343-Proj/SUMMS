@@ -1,20 +1,4 @@
-const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search'
-const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse'
-const MONTREAL_VIEWBOX = '-73.9,45.4,-73.4,45.7'
-
-async function fetchJson(url) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error('Location lookup failed.')
-  }
-
-  return response.json()
-}
+import { requestApiJson } from './api'
 
 export function toSearchLocation(result) {
   return {
@@ -26,37 +10,33 @@ export function toSearchLocation(result) {
 }
 
 export async function fetchLocationSuggestions(query, { limit = 12, bounded = 1 } = {}) {
-  const baseUrl =
-    `${NOMINATIM_SEARCH_URL}?format=jsonv2&q=${encodeURIComponent(query)}&viewbox=${MONTREAL_VIEWBOX}&bounded=${bounded}&limit=${limit}&countrycodes=ca`
-
-  const boundedResults = await fetchJson(baseUrl)
-  if (boundedResults.length > 0 || !/^\d+/.test(query.trim())) {
-    return boundedResults
+  const normalizedQuery = query.trim()
+  if (normalizedQuery.length < 3) {
+    return []
   }
 
-  return fetchJson(
-    `${NOMINATIM_SEARCH_URL}?format=jsonv2&q=${encodeURIComponent(`${query} Montreal Laval`)}&limit=${limit}&countrycodes=ca`
-  )
+  const params = new URLSearchParams({
+    query: normalizedQuery,
+    limit: String(limit),
+    bounded: bounded ? 'true' : 'false',
+  })
+  const payload = await requestApiJson(`/maps/address-suggestions?${params.toString()}`)
+  return Array.isArray(payload.suggestions) ? payload.suggestions : []
 }
 
 export async function geocodeLocationAddress(address) {
-  const results = await fetchJson(
-    `${NOMINATIM_SEARCH_URL}?format=jsonv2&q=${encodeURIComponent(address)}`
-  )
-
-  if (!Array.isArray(results) || results.length === 0) {
+  const payload = await requestApiJson(`/maps/geocode?address=${encodeURIComponent(address)}`)
+  if (!payload?.location) {
     throw new Error('Address not found. Please try another search.')
   }
 
-  return toSearchLocation(results[0])
+  return toSearchLocation(payload.location)
 }
 
 export async function reverseLookupLocation(lat, lng) {
-  const payload = await fetchJson(
-    `${NOMINATIM_REVERSE_URL}?format=jsonv2&lat=${lat}&lon=${lng}`
-  )
+  const payload = await requestApiJson(`/maps/reverse-geocode?lat=${lat}&lng=${lng}`)
 
-  return payload.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+  return payload.address || `${lat.toFixed(5)}, ${lng.toFixed(5)}`
 }
 
 export function getCurrentLocation() {

@@ -1,6 +1,16 @@
 import '../styles/ParkingSearch.css'
 import { useLocationSearchController } from '../controllers/useLocationSearchController'
 
+function renderSuggestionMain(suggestion) {
+  const parts = String(suggestion.display_name || '').split(',')
+  return parts.slice(0, 2).join(',').trim() || suggestion.display_name
+}
+
+function renderSuggestionSecondary(suggestion) {
+  const parts = String(suggestion.display_name || '').split(',')
+  return parts.slice(2).join(',').trim()
+}
+
 function LocationSearchModal({
   title,
   addressTitle = 'Enter Address',
@@ -29,13 +39,13 @@ function LocationSearchModal({
         <div className="parking-search-modal">
           <div className="search-header">
             <h2>{title}</h2>
-            <button className="close-btn" onClick={onClose}>
+            <button className="close-btn" type="button" onClick={onClose}>
               X
             </button>
           </div>
 
           <div className="search-options">
-            <button className="search-option-btn" onClick={handleUseCurrentLocation} disabled={loading}>
+            <button className="search-option-btn" type="button" onClick={handleUseCurrentLocation} disabled={loading}>
               <span>Use My Current Location</span>
               {loading && <span className="spinner"></span>}
             </button>
@@ -44,6 +54,7 @@ function LocationSearchModal({
 
             <button
               className="search-option-btn"
+              type="button"
               onClick={() => setSearchType('address')}
               disabled={loading}
             >
@@ -61,11 +72,11 @@ function LocationSearchModal({
     <div className="parking-search-overlay">
       <div className="parking-search-modal">
         <div className="search-header">
-          <button className="back-btn" onClick={() => setSearchType(null)}>
+          <button className="back-btn" type="button" onClick={() => setSearchType(null)}>
             Back
           </button>
           <h2>{addressTitle}</h2>
-          <button className="close-btn" onClick={onClose}>
+          <button className="close-btn" type="button" onClick={onClose}>
             X
           </button>
         </div>
@@ -88,10 +99,16 @@ function LocationSearchModal({
                   <div
                     key={`${suggestion.place_id ?? suggestion.display_name}-${index}`}
                     className="suggestion-item"
-                    onClick={() => handleSuggestionClick(suggestion)}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      handleSuggestionClick(suggestion)
+                    }}
                   >
                     <div className="suggestion-text">
-                      <div className="suggestion-main">{suggestion.display_name}</div>
+                      <div className="suggestion-main">{renderSuggestionMain(suggestion)}</div>
+                      {renderSuggestionSecondary(suggestion) && (
+                        <div className="suggestion-secondary">{renderSuggestionSecondary(suggestion)}</div>
+                      )}
                     </div>
                   </div>
                 ))}

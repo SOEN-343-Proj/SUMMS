@@ -20,6 +20,21 @@ class NearbyParkingResponse(BaseModel):
     count: int
 
 
+class LocationSuggestion(BaseModel):
+    place_id: str
+    lat: float
+    lon: float
+    display_name: str
+
+
+class LocationSuggestionsResponse(BaseModel):
+    suggestions: list[LocationSuggestion]
+
+
+class GeocodeResponse(BaseModel):
+    location: LocationSuggestion
+
+
 router = APIRouter()
 
 
@@ -31,6 +46,16 @@ def get_google_maps_key():
 @router.get("/maps/reverse-geocode")
 def reverse_geocode(lat: float, lng: float):
     return mobility_controller.reverse_geocode(lat, lng)
+
+
+@router.get("/maps/address-suggestions", response_model=LocationSuggestionsResponse)
+def fetch_location_suggestions(query: str, limit: int = 8, bounded: bool = True):
+    return mobility_controller.fetch_location_suggestions(query, limit, bounded)
+
+
+@router.get("/maps/geocode", response_model=GeocodeResponse)
+def geocode_location(address: str):
+    return mobility_controller.geocode_location(address)
 
 
 @router.get("/transit/directions")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-from ..models import parking_model, transit_model
+from ..models import location_model, parking_model, transit_model
 from ..observer import event_manager
 
 
@@ -14,9 +14,16 @@ def get_google_maps_key():
 
 
 def reverse_geocode(lat: float, lng: float):
-    if not parking_model.get_google_maps_api_key():
-        raise HTTPException(status_code=500, detail="Google Maps API key is not configured")
-    return {"address": parking_model.reverse_geocode(lat, lng)}
+    return {"address": location_model.reverse_lookup(lat, lng)}
+
+
+def fetch_location_suggestions(query: str, limit: int = 8, bounded: bool = True):
+    suggestions = location_model.search_address_suggestions(query, limit, bounded)
+    return {"suggestions": suggestions}
+
+
+def geocode_location(address: str):
+    return {"location": location_model.geocode_address(address)}
 
 
 def get_transit_directions(origin: str, destination: str):

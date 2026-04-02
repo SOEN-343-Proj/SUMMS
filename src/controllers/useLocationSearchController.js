@@ -15,11 +15,17 @@ export function useLocationSearchController({ onSearch }) {
   const [error, setError] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
   const debounceTimerRef = useRef(null)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
-    if (!address.trim() || searchType !== 'address') {
+    const trimmedAddress = address.trim()
+    requestIdRef.current += 1
+    const currentRequestId = requestIdRef.current
+
+    if (trimmedAddress.length < 3 || searchType !== 'address') {
       setSuggestions([])
       setShowSuggestions(false)
+      setLoading(false)
       return undefined
     }
 
@@ -30,16 +36,25 @@ export function useLocationSearchController({ onSearch }) {
     debounceTimerRef.current = setTimeout(async () => {
       try {
         setLoading(true)
-        const results = await fetchLocationSuggestions(address)
+        const results = await fetchLocationSuggestions(trimmedAddress)
+
+        if (requestIdRef.current !== currentRequestId) {
+          return
+        }
+
         setSuggestions(results)
         setShowSuggestions(results.length > 0)
       } catch {
-        setSuggestions([])
-        setShowSuggestions(false)
+        if (requestIdRef.current === currentRequestId) {
+          setSuggestions([])
+          setShowSuggestions(false)
+        }
       } finally {
-        setLoading(false)
+        if (requestIdRef.current === currentRequestId) {
+          setLoading(false)
+        }
       }
-    }, 150)
+    }, 320)
 
     return () => {
       if (debounceTimerRef.current) {
@@ -48,10 +63,16 @@ export function useLocationSearchController({ onSearch }) {
     }
   }, [address, searchType])
 
+  const handleAddressChange = (value) => {
+    setAddress(value)
+    setError('')
+  }
+
   const handleSuggestionClick = (suggestion) => {
     setAddress(suggestion.display_name)
     setSuggestions([])
     setShowSuggestions(false)
+    setError('')
     onSearch(toSearchLocation(suggestion))
   }
 
@@ -96,7 +117,7 @@ export function useLocationSearchController({ onSearch }) {
     loading,
     error,
     showSuggestions,
-    setAddress,
+    setAddress: handleAddressChange,
     setShowSuggestions,
     setSearchType,
     handleSuggestionClick,
