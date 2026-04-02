@@ -6,6 +6,19 @@ import BixiRentalFlow from './BixiRentalFlow'
 import VehicleRentalFlow from './VehicleRentalFlow'
 import { useUserDashboardController } from '../controllers/useUserDashboardController'
 
+function FeatureCard({ tool }) {
+  return (
+    <div className="dashboard-section">
+      <span className="dashboard-section-tag">{tool.category}</span>
+      <h2>{tool.title}</h2>
+      <p className="section-info">{tool.description}</p>
+      <button className="action-btn" onClick={tool.onClick}>
+        {tool.actionLabel}
+      </button>
+    </div>
+  )
+}
+
 function UserDashboard({ user, onLogout }) {
   const {
     showParkingMap,
@@ -13,6 +26,9 @@ function UserDashboard({ user, onLogout }) {
     showPublicTransitHub,
     showBixiRental,
     showVehicleRental,
+    weather,
+    weatherLoading,
+    weatherError,
     openParkingMap,
     closeParkingMap,
     openUberBixiMap,
@@ -93,6 +109,15 @@ function UserDashboard({ user, onLogout }) {
           <p className="welcome-text">Hello, {user.name}!</p>
           <p className="dashboard-subtext">Choose a tool below to plan your trip or manage your rentals.</p>
           <p className="user-email">{user.email}</p>
+          <div className="dashboard-weather">
+            {weatherLoading && <span>Montreal weather: loading...</span>}
+            {!weatherLoading && weatherError && <span>{weatherError}</span>}
+            {!weatherLoading && !weatherError && weather && (
+              <span>
+                {weather.symbol} Montreal weather: {Math.round(weather.temperature)}°C, {weather.summary.toLowerCase()}
+              </span>
+            )}
+          </div>
         </div>
         <button className="logout-btn" onClick={onLogout}>
           Logout
@@ -101,31 +126,17 @@ function UserDashboard({ user, onLogout }) {
 
       <div className="dashboard-sections">
         <section className="dashboard-subsection">
-          <div className="dashboard-grid">
+          <div className="dashboard-grid dashboard-grid-primary">
             {travelTools.map((tool) => (
-              <div key={tool.title} className="dashboard-section">
-                <span className="dashboard-section-tag">{tool.category}</span>
-                <h2>{tool.title}</h2>
-                <p className="section-info">{tool.description}</p>
-                <button className="action-btn" onClick={tool.onClick}>
-                  {tool.actionLabel}
-                </button>
-              </div>
+              <FeatureCard key={tool.title} tool={tool} />
             ))}
           </div>
         </section>
 
         <section className="dashboard-subsection">
-          <div className="dashboard-grid dashboard-grid-compact">
+          <div className="dashboard-grid dashboard-grid-secondary">
             {rentalTools.map((tool) => (
-              <div key={tool.title} className="dashboard-section">
-                <span className="dashboard-section-tag">{tool.category}</span>
-                <h2>{tool.title}</h2>
-                <p className="section-info">{tool.description}</p>
-                <button className="action-btn" onClick={tool.onClick}>
-                  {tool.actionLabel}
-                </button>
-              </div>
+              <FeatureCard key={tool.title} tool={tool} />
             ))}
           </div>
         </section>

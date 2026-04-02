@@ -60,6 +60,11 @@ export function addVehicle(payload) {
   })
 }
 
+export function decodeVehicleVin(vin) {
+  const query = new URLSearchParams({ vin })
+  return requestApiJson(`/vehicles/vin-decode?${query.toString()}`)
+}
+
 export function updateMarketplaceVehicle(vehicleId, payload) {
   return requestApiJson(`/vehicles/${vehicleId}`, {
     method: 'PATCH',
