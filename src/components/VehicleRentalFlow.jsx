@@ -1,25 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+
 import '../styles/ParkingMap.css'
 import '../styles/VehicleRentalFlow.css'
-import { trackEvent } from '../services/analytics'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-const DEFAULT_PAYMENT_METHODS = [
-  { id: 'card', name: 'Card', description: 'Sample credit card authorization' },
-  { id: 'wallet', name: 'Wallet', description: 'Sample wallet authorization' },
-  { id: 'transit_pass', name: 'Transit Pass', description: 'Sample transit pass charge' },
-]
-
-async function requestJson(url, options) {
-  const response = await fetch(url, options)
-  const data = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(data?.detail || 'Request failed')
-  }
-
-  return data
-}
+import { useVehicleRentalController } from '../controllers/useVehicleRentalController'
 
 function formatCurrency(amount) {
   return new Intl.NumberFormat('en-CA', {
@@ -49,6 +32,11 @@ function buildVehicleTitle(vehicle) {
 
 function buildVehicleMeta(vehicle) {
   const details = [
+    vehicle.vehicle_source === 'personal'
+      ? 'Status: Personal vehicle'
+      : vehicle.vehicle_source === 'rented'
+        ? 'Status: Active rental'
+        : null,
     `Type: ${toTitleCase(vehicle.vehicle_type || 'vehicle')}`,
     vehicle.color ? `Color: ${vehicle.color}` : null,
     vehicle.seats ? `Seats: ${vehicle.seats}` : null,
@@ -64,66 +52,18 @@ function buildVehicleMeta(vehicle) {
   return details.filter(Boolean)
 }
 
-function buildEditFormFromVehicle(vehicle) {
-  return {
-    vehicle_type: vehicle.vehicle_type || 'car',
-    make: vehicle.make || '',
-    model: vehicle.model || '',
-    year: vehicle.year || new Date().getFullYear(),
-    daily_rate: vehicle.daily_rate || 1,
-    color: vehicle.color || '',
-    transmission: vehicle.transmission || '',
-    seats: vehicle.seats || 1,
-    fuel_type: vehicle.fuel_type || '',
-  }
-}
-
-function buildPaymentDetails(method, user) {
-  switch (method) {
-    case 'wallet':
-      return {
-        wallet_id: `WALLET-${user.email.split('@')[0].toUpperCase()}`,
-      }
-    case 'transit_pass':
-      return {
-        pass_id: 'PASS-MTL-001',
-        holder_name: user.name,
-      }
-    case 'card':
-    default:
-      return {
-        card_brand: 'Visa',
-        card_last4: '4242',
-      }
-  }
-}
-
-function buildSamplePaymentInfo(method, user) {
-  if (method === 'wallet') {
-    return [
-      `Wallet ID: WALLET-${user.email.split('@')[0].toUpperCase()}`,
-      'Provider: WalletService',
-      'Status: Ready to authorize',
-    ]
-  }
-
-  if (method === 'transit_pass') {
-    return [
-      'Transit Pass ID: PASS-MTL-001',
-      `Holder: ${user.name}`,
-      'Network: TransitPassNetwork',
-    ]
-  }
-
-  return [
-    'Card: Visa ending in 4242',
-    `Cardholder: ${user.name}`,
-    'Provider: CardGateway',
-  ]
-}
-
-function VehicleCard({ vehicle, actionLabel, actionClass, onAction, onEdit, disabled, loading }) {
+function VehicleCard({ vehicle, actionLabel, actionClass, onAction, onEdit, menuActions = [], disabled, loading }) {
   const metadata = buildVehicleMeta(vehicle)
+  const showRate = vehicle.vehicle_source !== 'personal'
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const hasMenuActions = menuActions.length > 0
+
+  const handleMenuAction = (callback) => {
+    setShowActionsMenu(false)
+    if (callback) {
+      callback()
+    }
+  }
 
   return (
     <div className="vehicle-card">
@@ -131,7 +71,40 @@ function VehicleCard({ vehicle, actionLabel, actionClass, onAction, onEdit, disa
         <h4>
           {buildVehicleTitle(vehicle)}
         </h4>
-        <span className="vehicle-rate">{formatCurrency(vehicle.daily_rate)}/day</span>
+        <div className="vehicle-card-header-actions">
+          {showRate && <span className="vehicle-rate">{formatCurrency(vehicle.daily_rate)}/day</span>}
+          {hasMenuActions && (
+            <div className="vehicle-card-menu">
+              <button
+                className="vehicle-card-menu-toggle"
+                type="button"
+                aria-label={`Manage ${buildVehicleTitle(vehicle)}`}
+                aria-haspopup="menu"
+                aria-expanded={showActionsMenu}
+                onClick={() => setShowActionsMenu((current) => !current)}
+                disabled={disabled || loading}
+              >
+                ...
+              </button>
+              {showActionsMenu && (
+                <div className="vehicle-card-menu-panel" role="menu">
+                  {menuActions.map((action) => (
+                    <button
+                      key={`${vehicle.id}-${action.label}`}
+                      className={`vehicle-card-menu-item ${action.tone || ''}`.trim()}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => handleMenuAction(action.onClick)}
+                      disabled={disabled || loading}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="vehicle-meta-grid">
@@ -155,285 +128,62 @@ function VehicleCard({ vehicle, actionLabel, actionClass, onAction, onEdit, disa
 }
 
 function VehicleRentalFlow({ user, onClose }) {
-  const initialVehicleForm = {
-    vehicle_type: 'car',
-    make: '',
-    model: '',
-    year: new Date().getFullYear(),
-    daily_rate: 45,
-    color: '',
-    transmission: 'Automatic',
-    seats: 4,
-    fuel_type: 'Gasoline',
-  }
-
-  const [availableVehicles, setAvailableVehicles] = useState([])
-  const [myListings, setMyListings] = useState([])
-  const [userVehicles, setUserVehicles] = useState([])
-  const [paymentMethods, setPaymentMethods] = useState(DEFAULT_PAYMENT_METHODS)
-  const [paymentMethod, setPaymentMethod] = useState(DEFAULT_PAYMENT_METHODS[0].id)
-  const [vehicleTypeFilter, setVehicleTypeFilter] = useState('all')
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [selectedVehicleForPayment, setSelectedVehicleForPayment] = useState(null)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editingVehicleId, setEditingVehicleId] = useState('')
-  const [editVehicleForm, setEditVehicleForm] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState('')
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [vehicleForm, setVehicleForm] = useState(initialVehicleForm)
-
-  const selectedPaymentOption =
-    paymentMethods.find((method) => method.id === paymentMethod) || DEFAULT_PAYMENT_METHODS[0]
-  const paymentDetails = buildPaymentDetails(paymentMethod, user)
-  const samplePaymentInfo = buildSamplePaymentInfo(paymentMethod, user)
-
-  const loadPaymentMethods = async () => {
-    try {
-      const data = await requestJson(`${API_BASE_URL}/bixi/payments/methods`)
-      const methods = Array.isArray(data.methods) && data.methods.length > 0 ? data.methods : DEFAULT_PAYMENT_METHODS
-      setPaymentMethods(methods)
-      setPaymentMethod((current) => {
-        if (methods.some((method) => method.id === current)) {
-          return current
-        }
-        return methods[0]?.id || DEFAULT_PAYMENT_METHODS[0].id
-      })
-    } catch {
-      setPaymentMethods(DEFAULT_PAYMENT_METHODS)
-    }
-  }
-
-  const loadVehicles = async () => {
-    setLoading(true)
-    setError('')
-
-    try {
-      const userQuery = new URLSearchParams({ user_email: user.email })
-      const availableQuery = new URLSearchParams()
-      if (vehicleTypeFilter !== 'all') {
-        availableQuery.set('vehicle_type', vehicleTypeFilter)
-      }
-
-      const [availableData, userData, listingsData] = await Promise.all([
-        requestJson(`${API_BASE_URL}/vehicles/available?${availableQuery.toString()}`),
-        requestJson(`${API_BASE_URL}/vehicles/user?${userQuery.toString()}`),
-        requestJson(`${API_BASE_URL}/vehicles/listings/user?${userQuery.toString()}`),
-      ])
-
-      setAvailableVehicles(availableData.vehicles || [])
-      setUserVehicles(userData.vehicles || [])
-      setMyListings(listingsData.vehicles || [])
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadVehicles()
-    loadPaymentMethods()
-  }, [user.email, vehicleTypeFilter])
-
-  const availableVehicleTypes = Array.from(
-    new Set(availableVehicles.map((vehicle) => String(vehicle.vehicle_type || '').toLowerCase()).filter(Boolean))
-  ).sort()
+  const {
+    availableVehicles,
+    myListings,
+    userVehicles,
+    paymentMethods,
+    paymentMethod,
+    vehicleTypeFilter,
+    vehicleDestination,
+    showPaymentModal,
+    selectedVehicleForPayment,
+    showEditModal,
+    editingVehicleId,
+    editVehicleForm,
+    loading,
+    actionLoading,
+    error,
+    notice,
+    vehicleForm,
+    selectedPaymentOption,
+    samplePaymentInfo,
+    availableVehicleTypes,
+    editingVehicleSource,
+    setPaymentMethod,
+    setVehicleTypeFilter,
+    setVehicleDestination,
+    setShowPaymentModal,
+    setSelectedVehicleForPayment,
+    setShowEditModal,
+    setEditingVehicleId,
+    setEditingVehicleSource,
+    setEditVehicleForm,
+    handleRent,
+    handleConfirmRent,
+    handleReturn,
+    handleVehicleFormChange,
+    handleAddVehicle,
+    handleOpenEditModal,
+    handleEditFormChange,
+    handleRemoveVehicle,
+    handleSaveVehicleUpdate,
+  } = useVehicleRentalController({ user })
 
   const selectedVehicleTitle = selectedVehicleForPayment ? buildVehicleTitle(selectedVehicleForPayment) : ''
-
-  const handleRent = (vehicle) => {
-    setSelectedVehicleForPayment(vehicle)
-    setShowPaymentModal(true)
-  }
-
-  const handleConfirmRent = async () => {
-    if (!selectedVehicleForPayment) {
-      return
-    }
-
-    const vehicle = selectedVehicleForPayment
-    setActionLoading(`rent:${vehicle.id}`)
-    setError('')
-    setNotice('')
-
-    try {
-      await requestJson(`${API_BASE_URL}/vehicles/rent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: user.email,
-          user_name: user.name,
-          vehicle_id: vehicle.id,
-          payment_method: paymentMethod,
-          payment_details: paymentDetails,
-        }),
-      })
-
-      setNotice(`${vehicle.make} ${vehicle.model} is now in your vehicles. Payment authorized with ${selectedPaymentOption.name}.`)
-      trackEvent('vehicle_rented', { vehicle_type: vehicle.vehicle_type, make: vehicle.make, model: vehicle.model, daily_rate: vehicle.daily_rate, payment_method: paymentMethod, email: user.email })
-      setShowPaymentModal(false)
-      setSelectedVehicleForPayment(null)
-      await loadVehicles()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setActionLoading('')
-    }
-  }
-
-  const handleReturn = async (vehicle) => {
-    setActionLoading(`return:${vehicle.id}`)
-    setError('')
-    setNotice('')
-
-    try {
-      const data = await requestJson(`${API_BASE_URL}/vehicles/return`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: user.email,
-          vehicle_id: vehicle.id,
-        }),
-      })
-
-      const amountBilled = data?.rental?.billing?.amount_billed
-      const billedCurrency = data?.rental?.billing?.currency || 'CAD'
-      const billedText =
-        amountBilled !== undefined && amountBilled !== null
-          ? new Intl.NumberFormat('en-CA', {
-              style: 'currency',
-              currency: billedCurrency,
-            }).format(amountBilled)
-          : formatCurrency(vehicle.daily_rate)
-
-      setNotice(`${vehicle.make} ${vehicle.model} was returned. Amount billed: ${billedText}.`)
-      trackEvent('vehicle_returned', { vehicle_type: vehicle.vehicle_type, make: vehicle.make, model: vehicle.model, email: user.email })
-      await loadVehicles()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setActionLoading('')
-    }
-  }
-
-  const handleVehicleFormChange = (event) => {
-    const { name, value } = event.target
-    setVehicleForm((current) => ({
-      ...current,
-      [name]: value,
-    }))
-  }
-
-  const handleAddVehicle = async (event) => {
-    event.preventDefault()
-    setActionLoading('add-marketplace')
-    setError('')
-    setNotice('')
-
-    try {
-      const payload = {
-        listed_by_email: user.email,
-        vehicle_type: vehicleForm.vehicle_type.trim().toLowerCase(),
-        make: vehicleForm.make.trim(),
-        model: vehicleForm.model.trim(),
-        year: Number(vehicleForm.year),
-        daily_rate: Number(vehicleForm.daily_rate),
-        color: vehicleForm.color.trim() || undefined,
-        transmission: vehicleForm.transmission.trim() || undefined,
-        seats: Number(vehicleForm.seats),
-        fuel_type: vehicleForm.fuel_type.trim() || undefined,
-      }
-
-      const data = await requestJson(`${API_BASE_URL}/vehicles`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const addedVehicle = data?.vehicle
-      setNotice(`Added ${buildVehicleTitle(addedVehicle || payload)} to the marketplace.`)
-      trackEvent('vehicle_listed', { vehicle_type: payload.vehicle_type, make: payload.make, model: payload.model, email: user.email })
-      setVehicleForm(initialVehicleForm)
-      await loadVehicles()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setActionLoading('')
-    }
-  }
-
-  const handleOpenEditModal = (vehicle) => {
-    setEditingVehicleId(vehicle.id)
-    setEditVehicleForm(buildEditFormFromVehicle(vehicle))
-    setShowEditModal(true)
-  }
-
-  const handleEditFormChange = (event) => {
-    const { name, value } = event.target
-    setEditVehicleForm((current) => ({
-      ...current,
-      [name]: value,
-    }))
-  }
-
-  const handleSaveVehicleUpdate = async (event) => {
-    event.preventDefault()
-    if (!editingVehicleId || !editVehicleForm) {
-      return
-    }
-
-    setActionLoading('update-marketplace')
-    setError('')
-    setNotice('')
-
-    try {
-      const payload = {
-        user_email: user.email,
-        vehicle_type: editVehicleForm.vehicle_type.trim().toLowerCase(),
-        make: editVehicleForm.make.trim(),
-        model: editVehicleForm.model.trim(),
-        year: Number(editVehicleForm.year),
-        daily_rate: Number(editVehicleForm.daily_rate),
-        color: editVehicleForm.color.trim() || undefined,
-        transmission: editVehicleForm.transmission.trim() || undefined,
-        seats: Number(editVehicleForm.seats),
-        fuel_type: editVehicleForm.fuel_type.trim() || undefined,
-      }
-
-      const data = await requestJson(`${API_BASE_URL}/vehicles/${editingVehicleId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      setNotice(`Updated ${buildVehicleTitle(data?.vehicle || payload)} successfully.`)
-      setShowEditModal(false)
-      setEditingVehicleId('')
-      setEditVehicleForm(null)
-      await loadVehicles()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setActionLoading('')
-    }
-  }
+  const addActionLoading =
+    actionLoading === 'add-marketplace' || actionLoading === 'add-my-vehicles'
+  const addSectionTitle = vehicleDestination === 'my_vehicles' ? 'Add Vehicle To My Vehicles' : 'Add Vehicle To Marketplace'
+  const addSubmitLabel = vehicleDestination === 'my_vehicles' ? 'Add To My Vehicles' : 'Add To Marketplace'
+  const isEditingMarketplaceVehicle = editingVehicleSource === 'marketplace'
+  const editActionLoading = actionLoading === `update:${editingVehicleId}`
 
   return (
     <div className="parking-map-container vehicle-rental-container">
       <div className="parking-map-header vehicle-rental-header">
         <div>
-          <h2>Vehicle Rental</h2>
-          <p>Browse available vehicles and add rentals to your vehicles list.</p>
+          <h2>Vehicle Management</h2>
+          <p>Manage your garage, update marketplace listings, and browse vehicles that are available to rent.</p>
         </div>
         <button className="close-btn" type="button" onClick={onClose}>
           ✕
@@ -454,21 +204,59 @@ function VehicleRentalFlow({ user, onClose }) {
                 <VehicleCard
                   key={vehicle.id}
                   vehicle={vehicle}
-                  actionLabel="Return this vehicle"
+                  actionLabel={vehicle.vehicle_source === 'rented' ? 'Return this vehicle' : null}
                   actionClass="return"
-                  onAction={() => handleReturn(vehicle)}
+                  onAction={vehicle.vehicle_source === 'rented' ? () => handleReturn(vehicle) : null}
+                  menuActions={vehicle.vehicle_source === 'personal'
+                    ? [
+                        {
+                          label: 'Edit vehicle',
+                          onClick: () => handleOpenEditModal(vehicle),
+                        },
+                        {
+                          label: 'Remove vehicle',
+                          tone: 'danger',
+                          onClick: () => handleRemoveVehicle(vehicle),
+                        },
+                      ]
+                    : []}
                   disabled={Boolean(actionLoading)}
-                  loading={actionLoading === `return:${vehicle.id}`}
+                  loading={
+                    actionLoading === `return:${vehicle.id}`
+                    || actionLoading === `remove:${vehicle.id}`
+                    || actionLoading === `update:${vehicle.id}`
+                  }
                 />
               ))}
             </div>
           ) : (
-            <p className="vehicle-empty">You have no rented vehicles yet.</p>
+            <p className="vehicle-empty">You have no vehicles in your garage yet.</p>
           )}
         </section>
 
         <section className="vehicle-section marketplace-add-section">
-          <h3>Add Vehicle To Marketplace</h3>
+          <h3>{addSectionTitle}</h3>
+          <div className="vehicle-destination-toggle" role="tablist" aria-label="Vehicle add destination">
+            <button
+              type="button"
+              className={`vehicle-destination-btn ${vehicleDestination === 'marketplace' ? 'active' : ''}`}
+              onClick={() => setVehicleDestination('marketplace')}
+            >
+              Marketplace
+            </button>
+            <button
+              type="button"
+              className={`vehicle-destination-btn ${vehicleDestination === 'my_vehicles' ? 'active' : ''}`}
+              onClick={() => setVehicleDestination('my_vehicles')}
+            >
+              My Vehicles
+            </button>
+          </div>
+          <p className="vehicle-section-copy">
+            {vehicleDestination === 'my_vehicles'
+              ? 'Save a vehicle directly to your garage without listing it for rent.'
+              : 'Create a vehicle listing that other users can rent from the marketplace.'}
+          </p>
           <form className="marketplace-add-form" onSubmit={handleAddVehicle}>
             <input
               name="vehicle_type"
@@ -488,15 +276,18 @@ function VehicleRentalFlow({ user, onClose }) {
               onChange={handleVehicleFormChange}
               required
             />
-            <input
-              name="daily_rate"
-              type="number"
-              min="1"
-              step="0.5"
-              value={vehicleForm.daily_rate}
-              onChange={handleVehicleFormChange}
-              required
-            />
+            {vehicleDestination === 'marketplace' && (
+              <input
+                name="daily_rate"
+                type="number"
+                min="1"
+                step="0.5"
+                value={vehicleForm.daily_rate}
+                onChange={handleVehicleFormChange}
+                placeholder="Daily rate"
+                required
+              />
+            )}
             <input name="color" value={vehicleForm.color} onChange={handleVehicleFormChange} placeholder="Color" />
             <input
               name="transmission"
@@ -513,8 +304,8 @@ function VehicleRentalFlow({ user, onClose }) {
               required
             />
             <input name="fuel_type" value={vehicleForm.fuel_type} onChange={handleVehicleFormChange} placeholder="Fuel type" />
-            <button className="vehicle-action-btn rent" type="submit" disabled={actionLoading === 'add-marketplace'}>
-              {actionLoading === 'add-marketplace' ? 'Adding...' : 'Add To Marketplace'}
+            <button className="vehicle-action-btn rent" type="submit" disabled={addActionLoading}>
+              {addActionLoading ? 'Adding...' : addSubmitLabel}
             </button>
           </form>
         </section>
@@ -644,7 +435,9 @@ function VehicleRentalFlow({ user, onClose }) {
       {showEditModal && editVehicleForm && (
         <div className="payment-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="vehicle-edit-modal-title">
           <div className="payment-modal vehicle-edit-modal">
-            <h3 id="vehicle-edit-modal-title">Update Marketplace Listing</h3>
+            <h3 id="vehicle-edit-modal-title">
+              {isEditingMarketplaceVehicle ? 'Update Marketplace Listing' : 'Update Vehicle'}
+            </h3>
             <form className="marketplace-edit-form" onSubmit={handleSaveVehicleUpdate}>
               <input
                 name="vehicle_type"
@@ -664,15 +457,17 @@ function VehicleRentalFlow({ user, onClose }) {
                 onChange={handleEditFormChange}
                 required
               />
-              <input
-                name="daily_rate"
-                type="number"
-                min="1"
-                step="0.5"
-                value={editVehicleForm.daily_rate}
-                onChange={handleEditFormChange}
-                required
-              />
+              {isEditingMarketplaceVehicle && (
+                <input
+                  name="daily_rate"
+                  type="number"
+                  min="1"
+                  step="0.5"
+                  value={editVehicleForm.daily_rate}
+                  onChange={handleEditFormChange}
+                  required
+                />
+              )}
               <input name="color" value={editVehicleForm.color} onChange={handleEditFormChange} placeholder="Color" />
               <input
                 name="transmission"
@@ -702,14 +497,15 @@ function VehicleRentalFlow({ user, onClose }) {
                   onClick={() => {
                     setShowEditModal(false)
                     setEditingVehicleId('')
+                    setEditingVehicleSource('marketplace')
                     setEditVehicleForm(null)
                   }}
-                  disabled={actionLoading === 'update-marketplace'}
+                  disabled={editActionLoading}
                 >
                   Cancel
                 </button>
-                <button className="vehicle-action-btn edit" type="submit" disabled={actionLoading === 'update-marketplace'}>
-                  {actionLoading === 'update-marketplace' ? 'Saving...' : 'Save Updates'}
+                <button className="vehicle-action-btn edit" type="submit" disabled={editActionLoading}>
+                  {editActionLoading ? 'Saving...' : 'Save Updates'}
                 </button>
               </div>
             </form>

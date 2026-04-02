@@ -1,32 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import '../styles/ParkingMap.css'
 import '../styles/BixiRentalFlow.css'
 import LeafletMap from './LeafletMap'
 import LocationSearchModal from './LocationSearchModal'
-import { trackEvent } from '../services/analytics'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-const HISTORY_LIMIT = '5'
-const STATION_SEARCH_LIMIT = '12'
-const STATION_SEARCH_RADIUS = '3'
-const PAYMENT_AUTHORIZATION_AMOUNT = 4.25
-const DEFAULT_PAYMENT_METHODS = [
-  { id: 'card', name: 'Card', description: 'Sample credit card authorization' },
-  { id: 'wallet', name: 'Wallet', description: 'Sample wallet authorization' },
-  { id: 'transit_pass', name: 'Transit Pass', description: 'Sample transit pass charge' },
-]
-
-async function requestJson(url, options) {
-  const response = await fetch(url, options)
-  const data = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(data?.detail || 'Request failed')
-  }
-
-  return data
-}
+import { useBixiRentalController } from '../controllers/useBixiRentalController'
 
 function formatCurrency(amount) {
   if (amount === null || amount === undefined) {
@@ -45,71 +23,6 @@ function formatTimestamp(value) {
   }
 
   return new Date(value).toLocaleString()
-}
-
-function getSavedLocation(rental) {
-  if (!rental?.pickup_station) {
-    return null
-  }
-
-  return {
-    lat: rental.pickup_station.lat,
-    lng: rental.pickup_station.lng,
-    searchType: 'saved-rental',
-  }
-}
-
-function buildStationSearchQuery(location) {
-  return new URLSearchParams({
-    lat: String(location.lat),
-    lng: String(location.lng),
-    limit: STATION_SEARCH_LIMIT,
-    radius: STATION_SEARCH_RADIUS,
-  })
-}
-
-function buildMockPaymentDetails(method, user) {
-  switch (method) {
-    case 'wallet':
-      return {
-        wallet_id: `WALLET-${user.email.split('@')[0].toUpperCase()}`,
-      }
-    case 'transit_pass':
-      return {
-        pass_id: 'PASS-MTL-001',
-        holder_name: user.name,
-      }
-    case 'card':
-    default:
-      return {
-        card_brand: 'Visa',
-        card_last4: '4242',
-      }
-  }
-}
-
-function buildSamplePaymentInfo(method, user) {
-  if (method === 'wallet') {
-    return [
-      `Wallet ID: WALLET-${user.email.split('@')[0].toUpperCase()}`,
-      'Provider: WalletService',
-      'Status: Ready to authorize',
-    ]
-  }
-
-  if (method === 'transit_pass') {
-    return [
-      'Transit Pass ID: PASS-MTL-001',
-      `Holder: ${user.name}`,
-      'Network: TransitPassNetwork',
-    ]
-  }
-
-  return [
-    'Card: Visa ending in 4242',
-    `Cardholder: ${user.name}`,
-    'Provider: CardGateway',
-  ]
 }
 
 function SummaryGrid({ cards, compact = false }) {
@@ -138,28 +51,41 @@ function StationBadges({ station }) {
 function BixiRentalFlow({ user, onClose }) {
   const mapInstanceRef = useRef(null)
   const layersRef = useRef([])
-
-  const [activePage, setActivePage] = useState('rental')
-  const [searchLocation, setSearchLocation] = useState(null)
-  const [stations, setStations] = useState([])
-  const [openRental, setOpenRental] = useState(null)
-  const [history, setHistory] = useState([])
-  const [analytics, setAnalytics] = useState(null)
-  const [paymentMethods, setPaymentMethods] = useState(DEFAULT_PAYMENT_METHODS)
-  const [paymentMethod, setPaymentMethod] = useState(DEFAULT_PAYMENT_METHODS[0].id)
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [selectedStationId, setSelectedStationId] = useState('')
-  const [loadingState, setLoadingState] = useState(true)
-  const [loadingStations, setLoadingStations] = useState(false)
-  const [actionLoading, setActionLoading] = useState('')
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-
-  const selectedStation = stations.find((station) => station.id === selectedStationId) || null
-  const nearbyAvailableBikes = stations.reduce((sum, station) => sum + station.bikes_available, 0)
-  const nearbyAvailableDocks = stations.reduce((sum, station) => sum + station.docks_available, 0)
-  const isReserved = openRental?.status === 'reserved'
-  const isActive = openRental?.status === 'active'
+  const {
+    activePage,
+    searchLocation,
+    stations,
+    openRental,
+    history,
+    analytics,
+    paymentMethods,
+    paymentMethod,
+    showPaymentModal,
+    selectedStationId,
+    loadingState,
+    loadingStations,
+    actionLoading,
+    error,
+    notice,
+    selectedStation,
+    nearbyAvailableBikes,
+    nearbyAvailableDocks,
+    isReserved,
+    isActive,
+    selectedPaymentOption,
+    samplePaymentInfo,
+    PAYMENT_AUTHORIZATION_AMOUNT,
+    setActivePage,
+    setSearchLocation,
+    setPaymentMethod,
+    setShowPaymentModal,
+    setSelectedStationId,
+    setError,
+    setNotice,
+    handleReserve,
+    handlePay,
+    handleReturn,
+  } = useBixiRentalController({ user })
 
   const rentalCards = [
     { label: 'Nearby Bikes', value: nearbyAvailableBikes },
@@ -172,119 +98,6 @@ function BixiRentalFlow({ user, onClose }) {
     { label: 'Completed', value: analytics?.completed_rentals ?? 0 },
     { label: 'Average Duration', value: `${analytics?.average_duration_minutes ?? 0} min` },
   ]
-
-  const selectedPaymentOption =
-    paymentMethods.find((method) => method.id === paymentMethod) || DEFAULT_PAYMENT_METHODS[0]
-  const mockPaymentDetails = buildMockPaymentDetails(paymentMethod, user)
-  const samplePaymentInfo = buildSamplePaymentInfo(paymentMethod, user)
-
-  const applyStations = (nextStations) => {
-    setStations(nextStations)
-    setSelectedStationId((current) => {
-      if (current && nextStations.some((station) => station.id === current)) {
-        return current
-      }
-
-      return nextStations[0]?.id || ''
-    })
-  }
-
-  const loadStations = async (location) => {
-    if (!location) {
-      applyStations([])
-      return
-    }
-
-    setLoadingStations(true)
-    setError('')
-
-    try {
-      const query = buildStationSearchQuery(location)
-      const data = await requestJson(`${API_BASE_URL}/bixi/stations/nearby?${query.toString()}`)
-      applyStations(data.stations || [])
-    } catch (err) {
-      setError(err.message)
-      applyStations([])
-    } finally {
-      setLoadingStations(false)
-    }
-  }
-
-  const loadDashboardData = async () => {
-    const query = new URLSearchParams({
-      user_email: user.email,
-      history_limit: HISTORY_LIMIT,
-    })
-
-    const [stateData, analyticsData] = await Promise.all([
-      requestJson(`${API_BASE_URL}/bixi/rentals/state?${query.toString()}`),
-      requestJson(`${API_BASE_URL}/bixi/analytics/summary`),
-    ])
-
-    setOpenRental(stateData.open_rental)
-    setHistory(stateData.history || [])
-    setAnalytics(analyticsData)
-
-    const savedLocation = getSavedLocation(stateData.open_rental)
-    if (!searchLocation && savedLocation) {
-      setSearchLocation(savedLocation)
-    }
-
-    return savedLocation
-  }
-
-  const loadPaymentMethods = async () => {
-    try {
-      const data = await requestJson(`${API_BASE_URL}/bixi/payments/methods`)
-      const methods = Array.isArray(data.methods) && data.methods.length > 0 ? data.methods : DEFAULT_PAYMENT_METHODS
-      setPaymentMethods(methods)
-      setPaymentMethod((current) => {
-        if (methods.some((method) => method.id === current)) {
-          return current
-        }
-
-        return methods[0]?.id || DEFAULT_PAYMENT_METHODS[0].id
-      })
-    } catch {
-      setPaymentMethods(DEFAULT_PAYMENT_METHODS)
-    }
-  }
-
-  const refreshAfterAction = async () => {
-    const savedLocation = await loadDashboardData()
-    const locationToUse = searchLocation || savedLocation
-
-    if (locationToUse) {
-      await loadStations(locationToUse)
-    }
-  }
-
-  useEffect(() => {
-    const initialize = async () => {
-      setLoadingState(true)
-      setError('')
-
-      try {
-        await Promise.all([loadDashboardData(), loadPaymentMethods()])
-      } catch (err) {
-        setError(err.message)
-      } finally {
-        setLoadingState(false)
-      }
-    }
-
-    initialize()
-  }, [user.email])
-
-  useEffect(() => {
-    loadStations(searchLocation)
-  }, [searchLocation])
-
-  useEffect(() => {
-    if (!isReserved) {
-      setShowPaymentModal(false)
-    }
-  }, [isReserved])
 
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -351,101 +164,6 @@ function BixiRentalFlow({ user, onClose }) {
 
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 })
   }, [searchLocation, stations, selectedStationId, openRental, isActive])
-
-  const handleReserve = async (station) => {
-    setActionLoading(`reserve:${station.id}`)
-    setError('')
-    setNotice('')
-
-    try {
-      await requestJson(`${API_BASE_URL}/bixi/rentals/reserve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: user.email,
-          user_name: user.name,
-          station_id: station.id,
-        }),
-      })
-
-      setNotice(`Bike reserved at ${station.name}. Complete payment to unlock it.`)
-      trackEvent('bixi_reserved', { station_name: station.name, email: user.email })
-      await refreshAfterAction()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setActionLoading('')
-    }
-  }
-
-  const handlePay = async () => {
-    if (!openRental) {
-      return
-    }
-
-    setActionLoading('pay')
-    setError('')
-    setNotice('')
-
-    try {
-      await requestJson(`${API_BASE_URL}/bixi/rentals/${openRental.id}/pay`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: user.email,
-          payment_method: paymentMethod,
-          payment_details: mockPaymentDetails,
-        }),
-      })
-
-      setNotice(`Payment authorized with ${selectedPaymentOption.name}. Your BIXI rental is now active.`)
-      trackEvent('bixi_payment', { payment_method: paymentMethod, email: user.email })
-      setShowPaymentModal(false)
-      await refreshAfterAction()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setActionLoading('')
-    }
-  }
-
-  const handleReturn = async (station) => {
-    if (!openRental) {
-      return
-    }
-
-    setActionLoading(`return:${station.id}`)
-    setError('')
-    setNotice('')
-
-    try {
-      const data = await requestJson(`${API_BASE_URL}/bixi/rentals/${openRental.id}/return`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: user.email,
-          return_station_id: station.id,
-        }),
-      })
-
-      setOpenRental(null)
-      trackEvent('bixi_returned', { station_name: station.name, email: user.email })
-      setNotice(
-        `Ride returned at ${station.name}. Final charge: ${formatCurrency(data.rental?.payment?.final_cost)}.`
-      )
-      await refreshAfterAction()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setActionLoading('')
-    }
-  }
 
   const focusStation = (station) => {
     setSelectedStationId(station.id)

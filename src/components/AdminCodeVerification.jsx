@@ -1,42 +1,14 @@
-import { useState } from 'react'
 import '../styles/Login.css'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+import { useAdminCodeController } from '../controllers/useAuthControllers'
 
 function AdminCodeVerification({ onSuccess, onBack }) {
-  const [adminCode, setAdminCode] = useState(import.meta.env.DEV ? 'ADMIN2025' : '')
-  const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    setIsLoading(true)
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/admin/code`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ code: adminCode })
-      })
-
-      const data = await response.json()
-
-      if (response.ok && data.valid) {
-        setError('')
-        onSuccess()
-        return
-      }
-
-      setError('Invalid admin code. Access denied.')
-      setAdminCode('')
-    } catch {
-      setError('Unable to connect to server. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const {
+    adminCode,
+    error,
+    isLoading,
+    setAdminCode,
+    handleSubmit,
+  } = useAdminCodeController({ onSuccess })
 
   return (
     <div className="login-container">

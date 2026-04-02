@@ -1,76 +1,32 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import '../styles/ParkingMap.css'
 import ParkingSearch from './ParkingSearch'
 import LeafletMap from './LeafletMap'
+import { useParkingController } from '../controllers/useParkingController'
 
 function ParkingMap({ onClose }) {
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
-  const searchCacheRef = useRef(new Map())
-
-  const [searchLocation, setSearchLocation] = useState(null)
-  const [parkingSpots, setParkingSpots] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const getNearbyParkingSpots = async (lat, lng) => {
-    const roundedLat = Number(lat).toFixed(3)
-    const roundedLng = Number(lng).toFixed(3)
-    const cacheKey = `${roundedLat}:${roundedLng}:1`
-    const cachedSpots = searchCacheRef.current.get(cacheKey)
-
-    if (cachedSpots) {
-      setError(null)
-      setParkingSpots(cachedSpots)
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await fetch(`http://localhost:8000/parking/nearest?lat=${lat}&lng=${lng}&radius=1`)
-      if (!response.ok) throw new Error('Failed to fetch parking spots')
-      const data = await response.json()
-      const spots = data.spots || []
-      setParkingSpots(spots)
-
-      if (searchCacheRef.current.size >= 50) {
-        const oldestKey = searchCacheRef.current.keys().next().value
-        if (oldestKey) {
-          searchCacheRef.current.delete(oldestKey)
-        }
-      }
-      searchCacheRef.current.set(cacheKey, spots)
-    } catch (err) {
-      setError(err.message)
-      setParkingSpots([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { searchLocation, parkingSpots, loading, error, setSearchLocation } = useParkingController()
 
   useEffect(() => {
     const map = mapInstanceRef.current
-    if (!map) return
-    if (!searchLocation) return
+    if (!map || !searchLocation) return
 
     map.setView([searchLocation.lat, searchLocation.lng], 15)
-    getNearbyParkingSpots(searchLocation.lat, searchLocation.lng)
   }, [searchLocation])
 
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map) return
 
-    // Clear if no location
     if (!searchLocation) {
       markersRef.current.forEach((layer) => layer.remove())
       markersRef.current = []
       return
     }
 
-    // Clear existing
     markersRef.current.forEach((layer) => layer.remove())
     markersRef.current = []
 
@@ -126,7 +82,7 @@ function ParkingMap({ onClose }) {
     <div className="parking-map-container">
       {!searchLocation && (
         <ParkingSearch
-          onSearch={(location) => setSearchLocation(location)}
+          onSearch={setSearchLocation}
           onClose={onClose}
         />
       )}

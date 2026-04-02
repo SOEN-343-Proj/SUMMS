@@ -204,6 +204,10 @@ def _serialize_vehicle(vehicle: dict[str, Any]) -> dict[str, Any]:
     return vehicle_copy
 
 
+def _vehicle_source(vehicle: dict[str, Any]) -> str:
+    return str(vehicle.get('vehicle_source') or 'marketplace').strip().lower()
+
+
 def _find_vehicle(vehicle_id: str) -> dict[str, Any] | None:
     for vehicle in _vehicle_catalog:
         if vehicle['id'] == vehicle_id:
@@ -233,48 +237,36 @@ def _all_rented_vehicle_ids() -> set[str]:
     return rented_ids
 
 
-def _validate_vehicle_numeric_fields(vehicle: dict[str, Any]) -> None:
+def _validate_vehicle_numeric_fields(vehicle: dict[str, Any], *, require_daily_rate: bool = True) -> None:
     if int(vehicle.get('year') or 0) <= 0:
         raise ValueError('Year must be a positive number.')
-    if float(vehicle.get('daily_rate') or 0) <= 0:
+    if require_daily_rate and float(vehicle.get('daily_rate') or 0) <= 0:
         raise ValueError('Daily rate must be greater than 0.')
     if int(vehicle.get('seats') or 0) <= 0:
         raise ValueError('Seats must be greater than 0.')
 
 
-def get_available_vehicles(vehicle_type: str | None = None) -> list[dict[str, Any]]:
-    rented_ids = _all_rented_vehicle_ids()
-    available = [vehicle for vehicle in _vehicle_catalog if vehicle['id'] not in rented_ids]
-
-    if vehicle_type:
-        normalized_type = vehicle_type.strip().lower()
-        if normalized_type:
-            available = [
-                vehicle for vehicle in available
-                if str(vehicle.get('vehicle_type', '')).lower() == normalized_type
-            ]
-
-    return [_serialize_vehicle(vehicle) for vehicle in available]
-
-
-def add_marketplace_vehicle(vehicle_data: dict[str, Any]) -> dict[str, Any]:
+def _build_vehicle_record(vehicle_data: dict[str, Any], *, vehicle_source: str) -> dict[str, Any]:
+    normalized_source = vehicle_source.strip().lower()
     vehicle_type = str(vehicle_data.get('vehicle_type') or '').strip().lower()
     make = str(vehicle_data.get('make') or '').strip()
     model = str(vehicle_data.get('model') or '').strip()
-    listed_by_email = str(vehicle_data.get('listed_by_email') or '').strip().lower()
+    owner_email = str(vehicle_data.get('listed_by_email') or '').strip().lower()
 
+    if normalized_source not in {'marketplace', 'personal'}:
+        raise ValueError('Vehicle target must be marketplace or my_vehicles.')
     if not vehicle_type:
         raise ValueError('Vehicle type is required.')
     if not make:
         raise ValueError('Make is required.')
     if not model:
         raise ValueError('Model is required.')
-    if not listed_by_email:
-        raise ValueError('Listing owner email is required.')
+    if not owner_email:
+        raise ValueError('Vehicle owner email is required.')
 
     year = int(vehicle_data.get('year') or 0)
-    daily_rate = float(vehicle_data.get('daily_rate') or 0)
-
+    raw_daily_rate = vehicle_data.get('daily_rate')
+    daily_rate = float(raw_daily_rate) if raw_daily_rate is not None else 0.0
     raw_vehicle_id = str(vehicle_data.get('id') or '').strip()
     vehicle_id = raw_vehicle_id.upper() if raw_vehicle_id else _next_vehicle_id()
     if _find_vehicle(vehicle_id):
@@ -291,10 +283,14 @@ def add_marketplace_vehicle(vehicle_data: dict[str, Any]) -> dict[str, Any]:
         'transmission': vehicle_data.get('transmission') or 'Automatic',
         'fuel_type': vehicle_data.get('fuel_type') or 'Unknown',
         'seats': int(vehicle_data.get('seats') or 1),
-        'listed_by_email': listed_by_email,
+        'listed_by_email': owner_email,
+        'vehicle_source': normalized_source,
     }
 
-    _validate_vehicle_numeric_fields(created_vehicle)
+    _validate_vehicle_numeric_fields(
+        created_vehicle,
+        require_daily_rate=normalized_source == 'marketplace',
+    )
 
     if vehicle_data.get('range_km') is not None:
         created_vehicle['range_km'] = int(vehicle_data['range_km'])
@@ -303,18 +299,48 @@ def add_marketplace_vehicle(vehicle_data: dict[str, Any]) -> dict[str, Any]:
     if vehicle_data.get('helmet_included') is not None:
         created_vehicle['helmet_included'] = bool(vehicle_data['helmet_included'])
 
+    return created_vehicle
+
+
+def get_available_vehicles(vehicle_type: str | None = None) -> list[dict[str, Any]]:
+    rented_ids = _all_rented_vehicle_ids()
+    available = [
+        vehicle for vehicle in _vehicle_catalog
+        if vehicle['id'] not in rented_ids and _vehicle_source(vehicle) == 'marketplace'
+    ]
+
+    if vehicle_type:
+        normalized_type = vehicle_type.strip().lower()
+        if normalized_type:
+            available = [
+                vehicle for vehicle in available
+                if str(vehicle.get('vehicle_type', '')).lower() == normalized_type
+            ]
+
+    return [_serialize_vehicle(vehicle) for vehicle in available]
+
+
+def add_marketplace_vehicle(vehicle_data: dict[str, Any]) -> dict[str, Any]:
+    created_vehicle = _build_vehicle_record(vehicle_data, vehicle_source='marketplace')
     _vehicle_catalog.append(created_vehicle)
     return _serialize_vehicle(created_vehicle)
 
 
-def update_marketplace_vehicle(vehicle_id: str, updates: dict[str, Any], requester_email: str) -> dict[str, Any]:
+def add_user_vehicle(vehicle_data: dict[str, Any]) -> dict[str, Any]:
+    created_vehicle = _build_vehicle_record(vehicle_data, vehicle_source='personal')
+    _vehicle_catalog.append(created_vehicle)
+    return _serialize_vehicle(created_vehicle)
+
+
+def update_vehicle(vehicle_id: str, updates: dict[str, Any], requester_email: str) -> dict[str, Any]:
     vehicle = _find_vehicle(vehicle_id)
     if not vehicle:
         raise ValueError('Selected vehicle was not found.')
 
+    vehicle_source = _vehicle_source(vehicle)
     owner_email = str(vehicle.get('listed_by_email') or '').lower()
     if owner_email != requester_email.lower():
-        raise PermissionError('You can only update vehicles from your own listings.')
+        raise PermissionError('You can only update vehicles you own.')
 
     if vehicle_id in _all_rented_vehicle_ids():
         raise VehicleInUseError('This vehicle is currently rented and cannot be updated.')
@@ -362,23 +388,74 @@ def update_marketplace_vehicle(vehicle_id: str, updates: dict[str, Any], request
         elif field == 'helmet_included':
             normalized_updates[field] = bool(value)
 
+    if vehicle_source == 'personal':
+        normalized_updates.pop('daily_rate', None)
+
     updated_vehicle = dict(vehicle)
     updated_vehicle.update(normalized_updates)
-    _validate_vehicle_numeric_fields(updated_vehicle)
+    if vehicle_source == 'personal':
+        updated_vehicle['daily_rate'] = 0.0
+
+    _validate_vehicle_numeric_fields(
+        updated_vehicle,
+        require_daily_rate=vehicle_source == 'marketplace',
+    )
 
     vehicle.clear()
     vehicle.update(updated_vehicle)
     return _serialize_vehicle(vehicle)
 
 
+def update_marketplace_vehicle(vehicle_id: str, updates: dict[str, Any], requester_email: str) -> dict[str, Any]:
+    vehicle = _find_vehicle(vehicle_id)
+    if not vehicle:
+        raise ValueError('Selected vehicle was not found.')
+    if _vehicle_source(vehicle) != 'marketplace':
+        raise ValueError('Only marketplace vehicles can be updated here.')
+
+    return update_vehicle(vehicle_id, updates, requester_email)
+
+
+def remove_vehicle(vehicle_id: str, requester_email: str) -> dict[str, Any]:
+    vehicle = _find_vehicle(vehicle_id)
+    if not vehicle:
+        raise ValueError('Selected vehicle was not found.')
+
+    owner_email = str(vehicle.get('listed_by_email') or '').lower()
+    if owner_email != requester_email.lower():
+        raise PermissionError('You can only remove vehicles you own.')
+
+    if vehicle_id in _all_rented_vehicle_ids():
+        raise VehicleInUseError('This vehicle is currently rented and cannot be removed.')
+
+    removed_vehicle = _serialize_vehicle(vehicle)
+    _vehicle_catalog.remove(vehicle)
+    _vehicle_rentals_by_vehicle_id.pop(vehicle_id, None)
+    return removed_vehicle
+
+
 def get_user_vehicles(user_email: str) -> list[dict[str, Any]]:
-    vehicle_ids = _rented_by_user.get(user_email, [])
     vehicles: list[dict[str, Any]] = []
+    normalized_email = user_email.lower()
+
+    personal_vehicles = [
+        vehicle for vehicle in _vehicle_catalog
+        if _vehicle_source(vehicle) == 'personal'
+        and str(vehicle.get('listed_by_email', '')).lower() == normalized_email
+    ]
+    for vehicle in personal_vehicles:
+        vehicle_copy = _serialize_vehicle(vehicle)
+        vehicle_copy['vehicle_source'] = 'personal'
+        vehicles.append(vehicle_copy)
+
+    vehicle_ids = _rented_by_user.get(user_email, [])
 
     for vehicle_id in vehicle_ids:
         vehicle = _find_vehicle(vehicle_id)
         if vehicle:
-            vehicles.append(_serialize_vehicle(vehicle))
+            vehicle_copy = _serialize_vehicle(vehicle)
+            vehicle_copy['vehicle_source'] = 'rented'
+            vehicles.append(vehicle_copy)
 
     return vehicles
 
@@ -387,6 +464,7 @@ def get_user_marketplace_listings(user_email: str) -> list[dict[str, Any]]:
     listings = [
         vehicle for vehicle in _vehicle_catalog
         if str(vehicle.get('listed_by_email', '')).lower() == user_email.lower()
+        and _vehicle_source(vehicle) == 'marketplace'
     ]
     return [_serialize_vehicle(vehicle) for vehicle in listings]
 
@@ -401,6 +479,8 @@ def rent_vehicle(
     vehicle = _find_vehicle(vehicle_id)
     if not vehicle:
         raise ValueError('Selected vehicle was not found.')
+    if _vehicle_source(vehicle) != 'marketplace':
+        raise ValueError('Only marketplace vehicles can be rented.')
 
     if vehicle_id in _all_rented_vehicle_ids():
         raise ValueError('This vehicle is already rented by another user.')

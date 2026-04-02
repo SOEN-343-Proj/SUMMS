@@ -1,35 +1,22 @@
-import { useState } from 'react'
 import '../styles/WelcomePage.css'
 import UserLogin from './UserLogin'
 import AdminCodeVerification from './AdminCodeVerification'
 import AdminLogin from './AdminLogin'
 import AdminDashboard from './AdminDashboard'
 import UserDashboard from './UserDashboard'
+import { useWelcomeController } from '../controllers/useWelcomeController'
 
 function WelcomePage() {
-  const [view, setView] = useState('selection') // selection, userLogin, adminCode, adminLogin, adminDashboard, userDashboard
-  const [loggedInAdmin, setLoggedInAdmin] = useState(null)
-  const [loggedInUser, setLoggedInUser] = useState(null)
-
-  const handleAdminCodeSuccess = () => {
-    setView('adminLogin')
-  }
-
-  const handleAdminLoginSuccess = (adminInfo) => {
-    setLoggedInAdmin(adminInfo)
-    setView('adminDashboard')
-  }
-
-  const handleUserLoginSuccess = (userInfo) => {
-    setLoggedInUser(userInfo)
-    setView('userDashboard')
-  }
-
-  const handleBackToSelection = () => {
-    setView('selection')
-    setLoggedInAdmin(null)
-    setLoggedInUser(null)
-  }
+  const {
+    view,
+    loggedInAdmin,
+    loggedInUser,
+    setView,
+    handleAdminCodeSuccess,
+    handleAdminLoginSuccess,
+    handleUserLoginSuccess,
+    handleBackToSelection,
+  } = useWelcomeController()
 
   return (
     <div className="main">

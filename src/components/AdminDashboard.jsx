@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useAdminDashboardController } from "../controllers/useAdminDashboardController";
 import {
   LineChart,
   Line,
@@ -12,8 +12,6 @@ import {
   Legend,
 } from "recharts";
 import "../styles/AdminDashboard.css";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 const PIE_COLORS = ["#e1ff73", "#667eea", "#f093fb", "#f5576c", "#43e97b"];
 
@@ -113,36 +111,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 function AdminDashboard({ admin, onLogout }) {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [lastUpdated, setLastUpdated] = useState(null);
-
-  const fetchAnalytics = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/analytics`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data?.detail || "Failed to fetch analytics");
-        return;
-      }
-
-      setStats(data);
-      setLastUpdated(new Date());
-      setError("");
-    } catch {
-      setError("Unable to connect to backend");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAnalytics();
-    const interval = setInterval(fetchAnalytics, 30000);
-    return () => clearInterval(interval);
-  }, [fetchAnalytics]);
+  const { stats, loading, error, lastUpdated, fetchAnalytics } = useAdminDashboardController()
 
   const hourlyData = stats ? buildHourlyChartData(stats.hourly_buckets) : [];
   const pieData = stats ? buildPieData(stats.service_usage) : [];

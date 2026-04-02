@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import '../styles/PublicTransitHub.css'
 import LeafletMap from './LeafletMap'
-import { addressLookupAdapter, transitDirectionsAdapter } from '../services/transitAdapters'
-import { trackEvent } from '../services/analytics'
+import { useTransitController } from '../controllers/useTransitController'
 
 const DEFAULT_CENTER = [45.5017, -73.5673]
 
@@ -12,25 +11,36 @@ function PublicTransitHub({ onClose }) {
   const routeLayersRef = useRef([])
   const originMarkerRef = useRef(null)
   const destinationMarkerRef = useRef(null)
-  const originDebounceRef = useRef(null)
-  const destinationDebounceRef = useRef(null)
-
-  const [originText, setOriginText] = useState('')
-  const [destinationText, setDestinationText] = useState('')
-  const [originPoint, setOriginPoint] = useState(null)
-  const [destinationPoint, setDestinationPoint] = useState(null)
-  const [userLocation, setUserLocation] = useState(null)
-  const [searching, setSearching] = useState(false)
-  const [plannerError, setPlannerError] = useState('')
-  const [routeOptions, setRouteOptions] = useState([])
-  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0)
-  const [detailsRouteIndex, setDetailsRouteIndex] = useState(null)
-  const [originSuggestions, setOriginSuggestions] = useState([])
-  const [destinationSuggestions, setDestinationSuggestions] = useState([])
-  const [showOriginSuggestions, setShowOriginSuggestions] = useState(false)
-  const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false)
-  const [loadingOriginSuggestions, setLoadingOriginSuggestions] = useState(false)
-  const [loadingDestinationSuggestions, setLoadingDestinationSuggestions] = useState(false)
+  const {
+    originText,
+    destinationText,
+    originPoint,
+    destinationPoint,
+    searching,
+    plannerError,
+    routeOptions,
+    selectedRouteIndex,
+    detailsRouteIndex,
+    originSuggestions,
+    destinationSuggestions,
+    showOriginSuggestions,
+    showDestinationSuggestions,
+    loadingOriginSuggestions,
+    loadingDestinationSuggestions,
+    setOriginText,
+    setDestinationText,
+    setSelectedRouteIndex,
+    setDetailsRouteIndex,
+    setShowOriginSuggestions,
+    setShowDestinationSuggestions,
+    handleSuggestionSelect,
+    renderSuggestionMain,
+    renderSuggestionSecondary,
+    resetPlanner,
+    handleUseCurrentLocation,
+    handleRecenterToLocation,
+    handlePlanTrip,
+  } = useTransitController({ mapInstanceRef })
 
   const selectedRoute = routeOptions[selectedRouteIndex] ?? null
 
@@ -38,123 +48,6 @@ function PublicTransitHub({ onClose }) {
     .replace(/\bSubway\b/gi, 'Metro')
     .replace(/\bsubway\b/gi, 'metro')
     .replace(/\bMetro Line Line\b/gi, 'Metro Line')
-
-  const clearOriginSuggestions = () => {
-    setOriginSuggestions([])
-    setShowOriginSuggestions(false)
-    setLoadingOriginSuggestions(false)
-  }
-
-  const clearDestinationSuggestions = () => {
-    setDestinationSuggestions([])
-    setShowDestinationSuggestions(false)
-    setLoadingDestinationSuggestions(false)
-  }
-  useEffect(() => {
-    if (!originText.trim()) {
-      clearOriginSuggestions()
-      return undefined
-    }
-
-    if (originDebounceRef.current) {
-        clearTimeout(originDebounceRef.current)
-    }
-
-    originDebounceRef.current = setTimeout(async () => {
-      try {
-        setLoadingOriginSuggestions(true)
-        const matches = await addressLookupAdapter.fetchAddressSuggestions(originText.trim())
-        setOriginSuggestions(matches)
-        setShowOriginSuggestions(matches.length > 0)
-      } catch {
-        setOriginSuggestions([])
-        setShowOriginSuggestions(false)
-      } finally {
-        setLoadingOriginSuggestions(false)
-      }
-    }, 180)
-
-    return () => {
-      if (originDebounceRef.current) {
-        clearTimeout(originDebounceRef.current)
-      }
-    }
-  }, [originText])
-
-  useEffect(() => {
-    if (!destinationText.trim()) {
-      clearDestinationSuggestions()
-      return undefined
-    }
-
-    if (destinationDebounceRef.current) {
-      clearTimeout(destinationDebounceRef.current)
-    }
-
-    destinationDebounceRef.current = setTimeout(async () => {
-      try {
-        setLoadingDestinationSuggestions(true)
-        const matches = await addressLookupAdapter.fetchAddressSuggestions(destinationText.trim())
-        setDestinationSuggestions(matches)
-        setShowDestinationSuggestions(matches.length > 0)
-      } catch {
-        setDestinationSuggestions([])
-        setShowDestinationSuggestions(false)
-      } finally {
-        setLoadingDestinationSuggestions(false)
-      }
-    }, 180)
-
-    return () => {
-      if (destinationDebounceRef.current) {
-        clearTimeout(destinationDebounceRef.current)
-      }
-    }
-  }, [destinationText])
-
-  useEffect(() => () => {
-    if (originDebounceRef.current) {
-      clearTimeout(originDebounceRef.current)
-    }
-
-    if (destinationDebounceRef.current) {
-      clearTimeout(destinationDebounceRef.current)
-    }
-  }, [])
-
-  const handleSuggestionSelect = (field, suggestion) => {
-    const nextPoint = {
-      lat: Number(suggestion.lat),
-      lng: Number(suggestion.lon),
-    }
-    const nextLabel = suggestion.display_name || ''
-
-    if (field === 'origin') {
-      setOriginPoint(nextPoint)
-      setOriginText(nextLabel)
-      clearOriginSuggestions()
-    } else {
-      setDestinationPoint(nextPoint)
-      setDestinationText(nextLabel)
-      clearDestinationSuggestions()
-    }
-
-    setPlannerError('')
-    setShowOriginSuggestions(false)
-    setShowDestinationSuggestions(false)
-    mapInstanceRef.current?.setView([nextPoint.lat, nextPoint.lng], 14)
-  }
-
-  const renderSuggestionMain = (suggestion) => {
-    const parts = String(suggestion.display_name || '').split(',')
-    const primary = parts.slice(0, 2).join(',').trim()
-    return primary || suggestion.display_name
-  }
-
-  const renderSuggestionSecondary = (suggestion) => {
-    const parts = String(suggestion.display_name || '').split(',')
-    return parts.slice(2).join(',').trim()
-  }
 
   const syncMarker = (markerRef, point, label) => {
     const map = mapInstanceRef.current
@@ -229,157 +122,6 @@ function PublicTransitHub({ onClose }) {
 
     fitToRoute(selectedRoute.path)
   }, [selectedRoute, originPoint, destinationPoint])
-
-  const resetPlanner = () => {
-    setOriginText('')
-    setDestinationText('')
-    setOriginPoint(null)
-    setDestinationPoint(null)
-    setSearching(false)
-    setPlannerError('')
-    setRouteOptions([])
-    setSelectedRouteIndex(0)
-    setDetailsRouteIndex(null)
-    clearOriginSuggestions()
-    clearDestinationSuggestions()
-    mapInstanceRef.current?.setView(DEFAULT_CENTER, 11)
-  }
-
-  const getCurrentLocationPoint = () => new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Current location is not available in this browser.'))
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        })
-      },
-      () => {
-        reject(new Error('Unable to access your current location. Please enable location access in your browser.'))
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }
-    )
-  })
-
-  const centerMapOnPoint = (point, zoom = 15) => {
-    mapInstanceRef.current?.setView([point.lat, point.lng], zoom)
-  }
-
-  const applyCurrentLocationToOrigin = async (point) => {
-    setOriginPoint(point)
-    clearOriginSuggestions()
-    setShowOriginSuggestions(false)
-    setPlannerError('')
-    setOriginText('Loading current location...')
-    centerMapOnPoint(point)
-
-    try {
-      const label = await addressLookupAdapter.reverseLookup(point.lat, point.lng)
-      setOriginText(label)
-    } catch {
-      setOriginText('Current location')
-    }
-  }
-
-  const handleUseCurrentLocation = async () => {
-    try {
-      setPlannerError('')
-      const nextPoint = await getCurrentLocationPoint()
-      setUserLocation(nextPoint)
-      await applyCurrentLocationToOrigin(nextPoint)
-    } catch (error) {
-      setPlannerError(error.message)
-    }
-  }
-
-  const handleRecenterToLocation = async () => {
-    setPlannerError('')
-    mapInstanceRef.current?.setView(DEFAULT_CENTER, 11)
-  }
-
-  const handlePlanTrip = async () => {
-    let resolvedOriginPoint = originPoint
-    let resolvedDestinationPoint = destinationPoint
-    let resolvedOriginLabel = originText.trim()
-    let resolvedDestinationLabel = destinationText.trim()
-
-    if ((!resolvedOriginPoint && !resolvedOriginLabel) || (!resolvedDestinationPoint && !resolvedDestinationLabel)) {
-      setPlannerError('Choose both a starting point and a destination.')
-      return
-    }
-
-    setSearching(true)
-    setPlannerError('')
-
-    try {
-      if (!resolvedOriginPoint && resolvedOriginLabel) {
-        const match = await addressLookupAdapter.searchAddress(resolvedOriginLabel)
-        resolvedOriginPoint = { lat: match.lat, lng: match.lng }
-        resolvedOriginLabel = match.label
-        setOriginPoint(resolvedOriginPoint)
-        setOriginText(match.label)
-        clearOriginSuggestions()
-      }
-
-      if (!resolvedDestinationPoint && resolvedDestinationLabel) {
-        const match = await addressLookupAdapter.searchAddress(resolvedDestinationLabel)
-        resolvedDestinationPoint = { lat: match.lat, lng: match.lng }
-        resolvedDestinationLabel = match.label
-        setDestinationPoint(resolvedDestinationPoint)
-        setDestinationText(match.label)
-        clearDestinationSuggestions()
-      }
-
-      const origin = resolvedOriginPoint
-        ? `${resolvedOriginPoint.lat},${resolvedOriginPoint.lng}`
-        : resolvedOriginLabel
-      const destination = resolvedDestinationPoint
-        ? `${resolvedDestinationPoint.lat},${resolvedDestinationPoint.lng}`
-        : resolvedDestinationLabel
-
-      const routes = await transitDirectionsAdapter.fetchRoutes(origin, destination)
-
-      if (!routes.length) {
-        throw new Error('No transit route was found for that trip. Try another origin or destination.')
-      }
-
-      setRouteOptions(routes)
-      setSelectedRouteIndex(0)
-      setDetailsRouteIndex(0)
-      trackEvent('transit_route_searched', { origin: resolvedOriginLabel, destination: resolvedDestinationLabel, route_count: routes.length })
-
-      const firstRoute = routes[0]
-      if (firstRoute.startLocation) {
-        setOriginPoint({
-          lat: firstRoute.startLocation.lat,
-          lng: firstRoute.startLocation.lng,
-        })
-      }
-      if (firstRoute.startAddress) {
-        setOriginText(firstRoute.startAddress)
-        clearOriginSuggestions()
-      }
-      if (firstRoute.endLocation) {
-        setDestinationPoint({
-          lat: firstRoute.endLocation.lat,
-          lng: firstRoute.endLocation.lng,
-        })
-      }
-      if (firstRoute.endAddress) {
-        setDestinationText(firstRoute.endAddress)
-        clearDestinationSuggestions()
-      }
-    } catch (error) {
-      setRouteOptions([])
-      setPlannerError(error.message)
-    } finally {
-      setSearching(false)
-    }
-  }
 
   const detailsRoute = routeOptions[detailsRouteIndex ?? selectedRouteIndex] ?? null
   const detailSteps = detailsRoute?.steps ?? []

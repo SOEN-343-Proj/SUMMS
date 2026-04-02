@@ -1,137 +1,21 @@
-import { useState, useEffect, useRef } from 'react'
 import '../styles/ParkingSearch.css'
+import { useLocationSearchController } from '../controllers/useLocationSearchController'
 
 function ParkingSearch({ onSearch, onClose }) {
-  const [searchType, setSearchType] = useState(null)
-  const [address, setAddress] = useState('')
-  const [suggestions, setSuggestions] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const debounceTimerRef = useRef(null)
-
-  // Fetch suggestions from Nominatim API using bounding box for Montreal/Laval area
-  useEffect(() => {
-    if (!address.trim() || searchType !== 'address') {
-      setSuggestions([])
-      setShowSuggestions(false)
-      return
-    }
-
-    // Clear previous timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current)
-    }
-
-    // Set new timer for debouncing (150ms for snappier response)
-    debounceTimerRef.current = setTimeout(async () => {
-      try {
-        setLoading(true)
-        // Bounding box for Montreal/Laval area
-        // Format: minlon,minlat,maxlon,maxlat
-        const viewbox = '-73.9,45.4,-73.4,45.7'
-        
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&viewbox=${viewbox}&bounded=1&limit=12&countrycodes=ca`
-        )
-        const data = await response.json()
-        
-        // If no results with bounded search, try without bounding box for partial matches
-        let results = data
-        if (results.length === 0 && /^\d+/.test(address.trim())) {
-          const retryResponse = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ' Montreal Laval')}&limit=12&countrycodes=ca`
-          )
-          results = await retryResponse.json()
-        }
-        
-        setSuggestions(results)
-        setShowSuggestions(results.length > 0)
-        setLoading(false)
-      } catch (err) {
-        console.error(err)
-        setSuggestions([])
-        setLoading(false)
-      }
-    }, 150) // Wait 150ms after user stops typing
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current)
-      }
-    }
-  }, [address, searchType])
-
-  // Geocode address using OpenStreetMap Nominatim API
-  const geocodeAddress = async (addressString) => {
-    try {
-      setLoading(true)
-      setError('')
-      setSuggestions([])
-      setShowSuggestions(false)
-
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`
-      )
-      const data = await response.json()
-
-      if (data.length === 0) {
-        setError('Address not found. Please try another search.')
-        setLoading(false)
-        return
-      }
-
-      const { lat, lon } = data[0]
-      onSearch({ lat: parseFloat(lat), lng: parseFloat(lon), searchType: 'address' })
-    } catch (err) {
-      setError('Error searching for address. Please try again.')
-      console.error(err)
-      setLoading(false)
-    }
-  }
-
-  // Handle suggestion click
-  const handleSuggestionClick = (suggestion) => {
-    const { lat, lon, display_name } = suggestion
-    setAddress(display_name)
-    setSuggestions([])
-    setShowSuggestions(false)
-    onSearch({ lat: parseFloat(lat), lng: parseFloat(lon), searchType: 'address' })
-  }
-
-  // Use geolocation API
-  const handleUseCurrentLocation = async () => {
-    setLoading(true)
-    setError('')
-
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser.')
-      setLoading(false)
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-        onSearch({ lat: latitude, lng: longitude, searchType: 'geolocation' })
-        setLoading(false)
-      },
-      (err) => {
-        setError('Unable to access your location. Please enable location services.')
-        console.error(err)
-        setLoading(false)
-      }
-    )
-  }
-
-  const handleAddressSubmit = (e) => {
-    e.preventDefault()
-    if (!address.trim()) {
-      setError('Please enter an address.')
-      return
-    }
-    geocodeAddress(address)
-  }
+  const {
+    searchType,
+    address,
+    suggestions,
+    loading,
+    error,
+    showSuggestions,
+    setAddress,
+    setShowSuggestions,
+    setSearchType,
+    handleSuggestionClick,
+    handleUseCurrentLocation,
+    handleAddressSubmit,
+  } = useLocationSearchController({ onSearch })
 
   if (searchType === null) {
     return (
