@@ -27,3 +27,5 @@ dist-ssr
 .env
 # Analytics file
 analytics_data.json
+__pycache__/
+*.pyc
