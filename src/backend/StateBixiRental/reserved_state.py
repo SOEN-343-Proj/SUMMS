@@ -21,3 +21,6 @@ class ReservedRentalState(RentalState):
 
     def is_open(self) -> bool:
         return True
+
+    def pickup_bike_delta(self) -> int:
+        return 0

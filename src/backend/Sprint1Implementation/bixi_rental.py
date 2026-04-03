@@ -118,6 +118,9 @@ class ReservedRentalState(RentalState):
     def is_open(self) -> bool:
         return True
 
+    def pickup_bike_delta(self) -> int:
+        return 0
+
 # when staus is active, user has paid and can return the bike to a station.
 class ActiveRentalState(RentalState):
     status = 'active'
