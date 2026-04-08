@@ -69,6 +69,18 @@ def create_marketplace_vehicle(payload: VehicleCreateRequest):
         raise HTTPException(status_code=500, detail=f"Unable to add vehicle: {str(exc)}") from exc
 
 
+@router.get("/vehicles/vin-decode")
+def decode_vehicle_vin(vin: str):
+    try:
+        return vehicle_controller.decode_vehicle_vin(vin=vin)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Unable to decode VIN: {str(exc)}") from exc
+
+
 @router.patch("/vehicles/{vehicle_id}")
 def update_vehicle_listing(vehicle_id: str, payload: VehicleUpdateRequest):
     try:
