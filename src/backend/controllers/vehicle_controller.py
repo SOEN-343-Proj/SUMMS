@@ -23,6 +23,11 @@ def create_marketplace_vehicle(payload: dict):
     return {"success": True, "vehicle": vehicle}
 
 
+def decode_vehicle_vin(vin: str):
+    decoded_vehicle = vehicle_model.decode_vehicle_vin(vin)
+    return {"success": True, **decoded_vehicle}
+
+
 def update_vehicle_listing(vehicle_id: str, updates: dict, requester_email: str):
     vehicle = vehicle_model.update_vehicle(
         vehicle_id=vehicle_id,

@@ -8,6 +8,7 @@ import {
 import { fetchBixiPaymentMethods } from '../models/bixiModel'
 import {
   addVehicle,
+  decodeVehicleVin,
   fetchVehicleDashboard,
   removeVehicle,
   rentVehicle,
@@ -15,6 +16,13 @@ import {
   updateMarketplaceVehicle,
 } from '../models/vehicleModel'
 import { trackAnalyticsEvent } from '../models/analyticsModel'
+
+function normalizeVinInput(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 17)
+}
 
 function buildEditFormFromVehicle(vehicle) {
   return {
@@ -32,6 +40,7 @@ function buildEditFormFromVehicle(vehicle) {
 
 export function useVehicleRentalController({ user }) {
   const initialVehicleForm = {
+    vin: '',
     vehicle_type: 'car',
     make: '',
     model: '',
@@ -197,8 +206,48 @@ export function useVehicleRentalController({ user }) {
     const { name, value } = event.target
     setVehicleForm((current) => ({
       ...current,
-      [name]: value,
+      [name]: name === 'vin' ? normalizeVinInput(value) : value,
     }))
+  }
+
+  const handleAutofillFromVin = async () => {
+    const normalizedVin = normalizeVinInput(vehicleForm.vin)
+    if (!normalizedVin) {
+      setError('Enter a VIN to auto-fill vehicle details.')
+      setNotice('')
+      return
+    }
+
+    setActionLoading('decode-vin')
+    setError('')
+    setNotice('')
+
+    try {
+      const data = await decodeVehicleVin(normalizedVin)
+      const decodedVehicle = data?.vehicle || {}
+
+      setVehicleForm((current) => ({
+        ...current,
+        vin: data?.vin || normalizedVin,
+        vehicle_type: decodedVehicle.vehicle_type || current.vehicle_type,
+        make: decodedVehicle.make || current.make,
+        model: decodedVehicle.model || current.model,
+        year: decodedVehicle.year || current.year,
+        transmission: decodedVehicle.transmission || current.transmission,
+        seats: decodedVehicle.seats || current.seats,
+        fuel_type: decodedVehicle.fuel_type || current.fuel_type,
+      }))
+
+      const decodedTitle = [decodedVehicle.year, decodedVehicle.make, decodedVehicle.model]
+        .filter(Boolean)
+        .join(' ')
+
+      setNotice(`VIN decoded${decodedTitle ? ` for ${decodedTitle}` : ''}. Review the details before saving.`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActionLoading('')
+    }
   }
 
   const handleAddVehicle = async (event) => {
@@ -368,6 +417,7 @@ export function useVehicleRentalController({ user }) {
     handleConfirmRent,
     handleReturn,
     handleVehicleFormChange,
+    handleAutofillFromVin,
     handleAddVehicle,
     handleOpenEditModal,
     handleEditFormChange,

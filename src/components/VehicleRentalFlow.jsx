@@ -163,6 +163,7 @@ function VehicleRentalFlow({ user, onClose }) {
     handleConfirmRent,
     handleReturn,
     handleVehicleFormChange,
+    handleAutofillFromVin,
     handleAddVehicle,
     handleOpenEditModal,
     handleEditFormChange,
@@ -173,6 +174,7 @@ function VehicleRentalFlow({ user, onClose }) {
   const selectedVehicleTitle = selectedVehicleForPayment ? buildVehicleTitle(selectedVehicleForPayment) : ''
   const addActionLoading =
     actionLoading === 'add-marketplace' || actionLoading === 'add-my-vehicles'
+  const vinActionLoading = actionLoading === 'decode-vin'
   const addSectionTitle = vehicleDestination === 'my_vehicles' ? 'Add Vehicle To My Vehicles' : 'Add Vehicle To Marketplace'
   const addSubmitLabel = vehicleDestination === 'my_vehicles' ? 'Add To My Vehicles' : 'Add To Marketplace'
   const isEditingMarketplaceVehicle = editingVehicleSource === 'marketplace'
@@ -258,6 +260,26 @@ function VehicleRentalFlow({ user, onClose }) {
               : 'Create a vehicle listing that other users can rent from the marketplace.'}
           </p>
           <form className="marketplace-add-form" onSubmit={handleAddVehicle}>
+            <div className="vehicle-vin-row">
+              <input
+                name="vin"
+                value={vehicleForm.vin}
+                onChange={handleVehicleFormChange}
+                placeholder="VIN (17 characters)"
+                maxLength="17"
+              />
+              <button
+                className="vehicle-action-btn secondary"
+                type="button"
+                onClick={handleAutofillFromVin}
+                disabled={vinActionLoading || addActionLoading}
+              >
+                {vinActionLoading ? 'Decoding VIN...' : 'Auto-fill from VIN'}
+              </button>
+            </div>
+            <p className="vehicle-form-hint">
+              Optional. Use a 17-character VIN to auto-fill vehicle details from NHTSA.
+            </p>
             <input
               name="vehicle_type"
               value={vehicleForm.vehicle_type}
@@ -270,7 +292,7 @@ function VehicleRentalFlow({ user, onClose }) {
             <input
               name="year"
               type="number"
-              min="2000"
+              min="1900"
               max="2100"
               value={vehicleForm.year}
               onChange={handleVehicleFormChange}
@@ -451,7 +473,7 @@ function VehicleRentalFlow({ user, onClose }) {
               <input
                 name="year"
                 type="number"
-                min="2000"
+                min="1900"
                 max="2100"
                 value={editVehicleForm.year}
                 onChange={handleEditFormChange}
