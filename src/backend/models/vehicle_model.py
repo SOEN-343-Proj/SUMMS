@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from ..Sprint1Implementation.vehicle_rental import (
     VehicleInUseError,
     add_marketplace_vehicle,
@@ -15,8 +17,13 @@ from ..Sprint1Implementation.vehicle_rental import (
 )
 
 
+def _normalize_vin(vin: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", str(vin)).upper()
+
+
 __all__ = [
     "VehicleInUseError",
+    "_normalize_vin",
     "add_marketplace_vehicle",
     "add_user_vehicle",
     "get_available_vehicles",
