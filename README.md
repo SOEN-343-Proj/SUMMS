@@ -27,8 +27,8 @@ The project now follows an MVC-style split on both the frontend and backend.
 - Existing rental/payment domain logic from `src/backend/Sprint1Implementation/` is now consumed through the MVC backend layer.
 
 ## Team Architects Members
-- Antonino Guarraci - 40264079
-- Benedetto Guidi - 40228072
-- Justin Lombardi - 40263452
-- Malcolm Arcand-Laliberté - 26334792
-- Vladimir Todorov - 40203170
+- Antonino Guarraci - antoguarr - 40264079 
+- Benedetto Guidi - bguidi24 - 40228072
+- Justin Lombardi - JustinLombardi - 40263452
+- Malcolm Arcand-Laliberté - Shredsauce - 26334792
+- Vladimir Todorov - VladimirTodorov21 - 40203170
